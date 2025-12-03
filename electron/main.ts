@@ -1059,14 +1059,29 @@ function createWindow(): BrowserWindow {
   state.screenWidth = workArea.width;
   state.screenHeight = workArea.height;
   state.step = 60;
-  state.currentY = 0;
-  state.currentX = (workArea.width - 800) / 2;
+  
+  // Load saved position or use defaults
+  const savedX = store?.get('window-position-x') as number | undefined;
+  const savedY = store?.get('window-position-y') as number | undefined;
+  const defaultX = (workArea.width - 800) / 2 + 100;
+  const defaultY = 80;
+  
+  // Validate saved position is within screen bounds
+  if (savedX !== undefined && savedY !== undefined && 
+      savedX >= 0 && savedX < workArea.width - 100 &&
+      savedY >= 0 && savedY < workArea.height - 50) {
+    state.currentX = savedX;
+    state.currentY = savedY;
+  } else {
+    state.currentX = defaultX;
+    state.currentY = defaultY;
+  }
 
   const windowSettings: Electron.BrowserWindowConstructorOptions = {
     height: 120,
     width: 800,
     x: state.currentX,
-    y: 0,
+    y: state.currentY,
     alwaysOnTop: true,
     webPreferences: {
       nodeIntegration: true,
@@ -1248,6 +1263,12 @@ function handleWindowMove(): void {
     state.windowPosition = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
     state.currentX = bounds.x;
     state.currentY = bounds.y;
+    
+    // Save position to store for persistence
+    if (store) {
+      store.set('window-position-x', bounds.x);
+      store.set('window-position-y', bounds.y);
+    }
   }
 }
 
