@@ -72,6 +72,9 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const [isInteractive, setIsInteractive] = useState(false);
   const isTransparent = useTransparencyMode();
+  // System prompt state
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
   // Update state - persist once shown
   const [updateInfo, setUpdateInfo] = useState<{
     updateAvailable: boolean;
@@ -120,7 +123,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   }, [isVisible, deactivateInteractiveMode]);
 
   // FIXED: Use glass folder approach - fixed height with internal scrolling
-  const TOOLTIP_HEIGHT = 420; // Fixed height for consistent window sizing
+  const TOOLTIP_HEIGHT = 520; // Increased height for system prompt editor
   const TOOLTIP_WIDTH = 340; // Increased width for better readability
   const BASE_WINDOW_HEIGHT = 260;
 
@@ -143,6 +146,16 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         }
       } else {
         console.log("No API config found or response unsuccessful:", response);
+      }
+
+      // Load system prompt
+      try {
+        const promptResponse = await window.electronAPI.getSystemPrompt?.();
+        if (promptResponse?.success && promptResponse.data?.prompt) {
+          setSystemPrompt(promptResponse.data.prompt);
+        }
+      } catch (e) {
+        console.warn("Failed to load system prompt:", e);
       }
     } catch (error) {
       console.error("Failed to load API configuration:", error);
@@ -833,6 +846,79 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   )}
                 </button>
               </div>
+            </div>
+
+            {/* System Prompt Editor */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-white">System Prompt</h3>
+                <button
+                  onClick={() => {
+                    if (!isInteractive) return;
+                    setShowPromptEditor(!showPromptEditor);
+                  }}
+                  disabled={!isInteractive}
+                  tabIndex={isInteractive ? 0 : -1}
+                  className={`text-xs px-2 py-1 rounded transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 hover:text-white hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                >
+                  {showPromptEditor ? 'Hide' : 'Edit'}
+                </button>
+              </div>
+              {showPromptEditor && (
+                <div className="space-y-2">
+                  <textarea
+                    value={systemPrompt}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setSystemPrompt(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    placeholder="Enter custom system prompt... (leave empty for default)"
+                    rows={8}
+                    className={`w-full px-3 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 resize-none ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!isInteractive) return;
+                        try {
+                          await window.electronAPI.setSystemPrompt?.(systemPrompt);
+                          console.log("System prompt saved");
+                        } catch (e) {
+                          console.error("Failed to save system prompt:", e);
+                        }
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    >
+                      Save Prompt
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isInteractive) return;
+                        setSystemPrompt("");
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">
+                    Customize the AI system prompt. Leave empty to use the default interview-focused prompt.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Comprehensive Shortcuts Section */}

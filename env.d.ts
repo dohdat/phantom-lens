@@ -85,6 +85,17 @@ interface Window {
     // Settings
     onOpenSettings: (callback: () => void) => () => void;
     onSettingsUnlock: (callback: () => void) => () => void;
+    onToggleTransparency: (callback: () => void) => () => void;
+    // System Prompt
+    getSystemPrompt: () => Promise<{
+      success: boolean;
+      data?: { prompt: string | null };
+      error?: string;
+    }>;
+    setSystemPrompt: (prompt: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
     // Update check
     checkGitHubUpdate: () => Promise<{
       success: boolean;

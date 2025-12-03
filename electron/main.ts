@@ -362,6 +362,7 @@ export interface IProcessingHelperDeps {
   getView: () => "initial" | "response" | "followup";
   setView: (view: "initial" | "response" | "followup") => void;
   getConfiguredModel: () => Promise<string>;
+  getSystemPrompt: () => Promise<string | null>;
   setHasFollowedUp: (hasFollowedUp: boolean) => void;
   clearQueues: () => void;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
@@ -1003,6 +1004,7 @@ function initializeHelpers() {
     setHasFollowedUp,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     getConfiguredModel,
+    getSystemPrompt,
     getUserPrompt: () => state.currentPrompt,
     clearUserPrompt: () => { state.currentPrompt = null; },
     getPreviousResponse: () => state.processingHelper?.getPreviousResponse() || null,
@@ -1510,6 +1512,15 @@ async function getConfiguredModel(): Promise<string> {
   } catch (error) {
     console.error("Error getting configured model from store:", error);
     return "gemini-2.0-flash";
+  }
+}
+
+async function getSystemPrompt(): Promise<string | null> {
+  try {
+    return await getStoreValue("system-prompt");
+  } catch (error) {
+    console.error("Error getting system prompt from store:", error);
+    return null;
   }
 }
 

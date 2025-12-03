@@ -426,27 +426,23 @@ export class ProcessingHelper {
         `[PROCESSING] Images added to contentParts: ${imageParts.length}`
       );
 
-      const promptLines = [
-        `You are an expert assistant tasked with solving the task shown in the images.`,
-        ``,
-        `## Interview Context`,
-        `You are interviewing for a software engineer position. When solving coding problems, follow these rules:`,
-        `• Do not include code comments.`,
-        `• Provide two or three unit tests.`,
-        `• Include time and space complexity.`,
-        ``,
-        `When solving system design problems, follow this structure:`,
-        `• Ask clarifying questions before beginning the solution, such as expected daily active users, read and write throughput, expected storage size per user and in total, latency requirements, data retention policies, and anticipated traffic growth.`,
-        `• Define the functional requirements.`,
-        `• Define the non functional requirements.`,
-        `• List constraints and assumptions.`,
-        `• Identify core entities and APIs.`,
-        `• Present a high level architecture.`,
-        `• Describe key components and how they interact.`,
-        `• Address scalability, reliability, and fault tolerance.`,
-        `• Provide deep dives into selected components when appropriate.`,
-        ``,
-      ];
+      // Try to get custom system prompt from settings
+      let customPrompt: string | null = null;
+      try {
+        customPrompt = await this.deps.getSystemPrompt();
+      } catch (e) {
+        console.warn("Failed to get custom system prompt:", e);
+      }
+
+      // Use custom prompt if available, otherwise use default
+      let promptLines: string[];
+      if (customPrompt && customPrompt.trim().length > 0) {
+        console.log("[PROCESSING] Using custom system prompt from settings");
+        promptLines = customPrompt.split('\n');
+      } else {
+        console.log("[PROCESSING] Using default system prompt");
+        promptLines = this.getDefaultPromptLines();
+      }
 
       // Include optional user prompt (normal mode typing)
       try {
@@ -458,24 +454,6 @@ export class ProcessingHelper {
         }
       } catch {}
 
-      promptLines.push(
-        `---`,
-        `Your response MUST follow this structure, using Markdown headings:`,
-        ``,
-        `# Analysis`,
-        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
-        ``,
-        `# Solution`,
-        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
-        `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
-        ``,
-        `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
-        ``,
-        `---`,
-        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
-        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
-      );
       const prompt = promptLines.join("\n");
 
       if (signal.aborted) throw new Error("Request aborted");
@@ -676,30 +654,30 @@ export class ProcessingHelper {
       // Prepare content parts array starting with images
       const contentParts = [...imageParts];
 
-      const promptLines = [
-        `You are an expert assistant tasked with solving the follow-up issue shown in the images.`,
-        ``,
-        `## Interview Context`,
-        `You are interviewing for a software engineer position. When solving coding problems, follow these rules:`,
-        `• Do not include code comments.`,
-        `• Provide two or three unit tests.`,
-        `• Include time and space complexity.`,
-        ``,
-        `When solving system design problems, follow this structure:`,
-        `• Ask clarifying questions before beginning the solution, such as expected daily active users, read and write throughput, expected storage size per user and in total, latency requirements, data retention policies, and anticipated traffic growth.`,
-        `• Define the functional requirements.`,
-        `• Define the non functional requirements.`,
-        `• List constraints and assumptions.`,
-        `• Identify core entities and APIs.`,
-        `• Present a high level architecture.`,
-        `• Describe key components and how they interact.`,
-        `• Address scalability, reliability, and fault tolerance.`,
-        `• Provide deep dives into selected components when appropriate.`,
-        ``,
-        `## Previous Response Context`,
-        `This is a follow-up to a previous response. Please consider the context and build upon it appropriately.`,
-        ``,
-      ];
+      // Try to get custom system prompt from settings
+      let customPrompt: string | null = null;
+      try {
+        customPrompt = await this.deps.getSystemPrompt();
+      } catch (e) {
+        console.warn("Failed to get custom system prompt for follow-up:", e);
+      }
+
+      // Use custom prompt if available, otherwise use default follow-up prompt
+      let promptLines: string[];
+      if (customPrompt && customPrompt.trim().length > 0) {
+        console.log("[FOLLOW-UP] Using custom system prompt from settings");
+        promptLines = customPrompt.split('\n');
+        // Add follow-up context to custom prompt
+        promptLines.push(
+          ``,
+          `## Previous Response Context`,
+          `This is a follow-up to a previous response. Please consider the context and build upon it appropriately.`,
+          ``
+        );
+      } else {
+        console.log("[FOLLOW-UP] Using default system prompt");
+        promptLines = this.getDefaultFollowUpPromptLines();
+      }
 
       // Include user's typed follow-up text if available
       if (userPrompt && userPrompt.trim().length > 0) {
@@ -714,33 +692,6 @@ export class ProcessingHelper {
         }
       } catch {}
 
-      promptLines.push(
-        `---`,
-        `Your response MUST follow this structure, using Markdown headings:`,
-        ``,
-        `# Context`,
-        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
-        ``,
-        `# What's the question?`,
-        `Briefly summarize based on the visual and audio content. This helps set context for the analysis.`,
-        ``,
-        `# Analysis`,
-        `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
-        ``,
-        `# Solution`,
-        `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
-        `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
-        ``,
-        `# Approach`,
-        `Describe the approach taken to solve the issue. Focus on implementation details and any specific techniques used. Make sure to keep it concise and relevant to the visual/audio content.`,
-        ``,
-        `# Summary`,
-        `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
-        ``,
-        `---`,
-        `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
-        `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`
-      );
       const prompt = promptLines.join("\n");
 
       if (signal.aborted) throw new Error("Request aborted");
@@ -971,6 +922,101 @@ export class ProcessingHelper {
     } finally {
       this.isCurrentlyProcessing = false;
     }
+  }
+
+  // ============================================================================
+  // Default System Prompt
+  // ============================================================================
+  private getDefaultPromptLines(): string[] {
+    return [
+      `You are an expert assistant tasked with solving the task shown in the images.`,
+      ``,
+      `## Interview Context`,
+      `You are interviewing for a software engineer position. When solving coding problems, follow these rules:`,
+      `• Do not include code comments.`,
+      `• Provide two or three unit tests.`,
+      `• Include time and space complexity.`,
+      ``,
+      `When solving system design problems, follow this structure:`,
+      `• Ask clarifying questions before beginning the solution, such as expected daily active users, read and write throughput, expected storage size per user and in total, latency requirements, data retention policies, and anticipated traffic growth.`,
+      `• Define the functional requirements.`,
+      `• Define the non functional requirements.`,
+      `• List constraints and assumptions.`,
+      `• Identify core entities and APIs.`,
+      `• Present a high level architecture.`,
+      `• Describe key components and how they interact.`,
+      `• Address scalability, reliability, and fault tolerance.`,
+      `• Provide deep dives into selected components when appropriate.`,
+      ``,
+      `---`,
+      `Your response MUST follow this structure, using Markdown headings:`,
+      ``,
+      `# Analysis`,
+      `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
+      ``,
+      `# Solution`,
+      `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
+      `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
+      ``,
+      `# Summary`,
+      `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
+      ``,
+      `---`,
+      `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+      `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`,
+    ];
+  }
+
+  private getDefaultFollowUpPromptLines(): string[] {
+    return [
+      `You are an expert assistant tasked with solving the follow-up issue shown in the images.`,
+      ``,
+      `## Interview Context`,
+      `You are interviewing for a software engineer position. When solving coding problems, follow these rules:`,
+      `• Do not include code comments.`,
+      `• Provide two or three unit tests.`,
+      `• Include time and space complexity.`,
+      ``,
+      `When solving system design problems, follow this structure:`,
+      `• Ask clarifying questions before beginning the solution, such as expected daily active users, read and write throughput, expected storage size per user and in total, latency requirements, data retention policies, and anticipated traffic growth.`,
+      `• Define the functional requirements.`,
+      `• Define the non functional requirements.`,
+      `• List constraints and assumptions.`,
+      `• Identify core entities and APIs.`,
+      `• Present a high level architecture.`,
+      `• Describe key components and how they interact.`,
+      `• Address scalability, reliability, and fault tolerance.`,
+      `• Provide deep dives into selected components when appropriate.`,
+      ``,
+      `## Previous Response Context`,
+      `This is a follow-up to a previous response. Please consider the context and build upon it appropriately.`,
+      ``,
+      `---`,
+      `Your response MUST follow this structure, using Markdown headings:`,
+      ``,
+      `# Context`,
+      `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
+      ``,
+      `# What's the question?`,
+      `Briefly summarize based on the visual and audio content. This helps set context for the analysis.`,
+      ``,
+      `# Analysis`,
+      `If audio is provided, briefly reference what you hear and how it relates to the visual content. Keep this extremely brief and focus on your solution approach. One or two sentences maximum.`,
+      ``,
+      `# Solution`,
+      `Provide the direct solution based on both visual and audio content. Use standard Markdown. If code is necessary, use appropriate code blocks. Do not describe the task itself.`,
+      `IMPORTANT: When adding code blocks, use triple backticks WITH the language specifier. Use \`\`\`language\\ncode here\\n\`\`\`.`,
+      ``,
+      `# Approach`,
+      `Describe the approach taken to solve the issue. Focus on implementation details and any specific techniques used. Make sure to keep it concise and relevant to the visual/audio content.`,
+      ``,
+      `# Summary`,
+      `Provide only 1-2 sentences focusing on implementation details. Mention if audio context influenced the solution. No conclusions or verbose explanations.`,
+      ``,
+      `---`,
+      `Remember: If audio is provided, reference it naturally in your response. Focus on the solution itself.`,
+      `CODE FORMATTING: Use ONLY \`\`\` WITH the language specifier for all code blocks.`,
+    ];
   }
 
   // ============================================================================

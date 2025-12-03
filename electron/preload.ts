@@ -102,6 +102,16 @@ interface ElectronAPI {
   onOpenSettings: (callback: () => void) => () => void;
   onSettingsUnlock: (callback: () => void) => () => void;
   onToggleTransparency: (callback: () => void) => () => void;
+  // System Prompt
+  getSystemPrompt: () => Promise<{
+    success: boolean;
+    data?: { prompt: string | null };
+    error?: string;
+  }>;
+  setSystemPrompt: (prompt: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   // Usage Counter
   getAppOpenCount: () => Promise<{
     success: boolean;
@@ -354,6 +364,9 @@ const electronAPI = {
       ipcRenderer.removeListener("toggle-transparency", subscription);
     };
   },
+  // System Prompt
+  getSystemPrompt: () => ipcRenderer.invoke("get-system-prompt"),
+  setSystemPrompt: (prompt: string) => ipcRenderer.invoke("set-system-prompt", prompt),
   // Usage Counter
   getAppOpenCount: () => ipcRenderer.invoke("get-app-open-count"),
   setStatsServerEndpoint: (endpoint: string) =>

@@ -897,5 +897,37 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "open-settings"));
 
+  // ============================================================================
+  // System Prompt Configuration Handlers
+  // ============================================================================
+  ipcMain.handle("get-system-prompt", createSafeIpcHandler(async () => {
+    try {
+      const prompt = await getStoreValue("system-prompt");
+      return { success: true, data: { prompt: prompt || null } };
+    } catch (error: any) {
+      console.error("Error getting system prompt:", error);
+      return { success: false, error: "Failed to get system prompt" };
+    }
+  }, "get-system-prompt"));
+
+  ipcMain.handle("set-system-prompt", createSafeIpcHandler(async (
+    _event: any,
+    prompt: string
+  ) => {
+    try {
+      const success = await setStoreValue("system-prompt", prompt);
+      if (!success) {
+        return { success: false, error: "Failed to save system prompt" };
+      }
+      console.log("System prompt saved successfully");
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting system prompt:", error);
+      return { success: false, error: "Failed to save system prompt" };
+    }
+  }, "set-system-prompt"));
+
+
+
   console.log("FIXED: All IPC handlers initialized successfully with DIRECT dimension updates (NO BATCHING)");
 }
