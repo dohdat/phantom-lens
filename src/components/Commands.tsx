@@ -149,6 +149,12 @@ export default function Commands({
       show: true,
     },
     {
+      id: "transparent",
+      label: "Transparent",
+      keys: [COMMAND_KEY, "⇧", "V"],
+      show: true,
+    },
+    {
       id: "scroll",
       label: "Scroll",
       keys: ["Alt", "↑↓"],
