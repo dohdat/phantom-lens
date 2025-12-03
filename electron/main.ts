@@ -1011,120 +1011,85 @@ function createWindow(): BrowserWindow {
 
   state.mainWindow = new BrowserWindow(windowSettings);
 
-  // PERFORMANCE: Set skipTaskbar and focusable once, rely on applyInteractivityState for consistency
-  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-    state.mainWindow.setSkipTaskbar(true);
-    state.mainWindow.setFocusable(false);
+  // INSTANT: Set essential properties and show immediately
+  state.mainWindow.setSkipTaskbar(true);
+  state.mainWindow.setFocusable(false);
+  state.mainWindow.setIgnoreMouseEvents(true);
+  
+  // Show window immediately
+  if (process.platform === "darwin") {
+    state.mainWindow.showInactive();
+  } else {
+    state.mainWindow.show();
   }
-
-  // Apply interactivity state once
-  applyInteractivityState();
-  
-  // Show the window without stealing focus
-  showWindowWithoutFocus();
   state.mainWindow.setOpacity(1);
-  state.mainWindow.webContents.setFrameRate(30);
-
-  state.mainWindow.webContents.on("did-finish-load", () => {
-    console.log("Window finished loading");
-    applyInteractivityState();
-  });
-
-  state.mainWindow.webContents.on("did-fail-load", (event: any, errorCode: number, errorDescription: string) => {
-    console.error("Window failed to load:", errorCode, errorDescription);
-    console.log("Attempting to load built files from dist...");
-    setTimeout(() => {
-      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.loadFile(path.join(__dirname, "../dist/index.html"))
-          .catch((error) => {
-            console.error("Failed to load built files on retry:", error);
-          });
-      }
-    }, 1000);
-  });
   
-  console.log("Loading application...");
+  // Load the app content
   if (app.isPackaged) {
     state.mainWindow.loadFile(path.join(__dirname, "../index.html"));
   } else {
     state.mainWindow.loadURL("http://localhost:54321");
   }
   
-  state.mainWindow.setContentProtection(true);
-  state.mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  
-  // CRITICAL: Re-apply interactivity state after setVisibleOnAllWorkspaces
-  // This ensures the window remains non-focusable and skips taskbar even in full screen mode
-  applyInteractivityState();
-
-  if (process.platform === "darwin") {
-    app.dock.hide();
-    state.mainWindow.setHiddenInMissionControl(true);
-  }
-
-  // Add event listeners to maintain correct state when window visibility changes
-  state.mainWindow.on("show", () => {
-    // Re-apply interactivity state when window is shown (including in full screen mode)
-    applyInteractivityState();
-  });
-
-  state.mainWindow.on("focus", () => {
-    // CRITICAL: If window should be inert, immediately remove focus and re-apply state
-    // This prevents any focus stealing that might be detected by other apps
-    if (isInteractiveOverrideEnabled()) {
-      return;
-    }
-    const shouldBeInert = state.mode === "stealth" || 
-                         state.view === "response" || 
-                         state.view === "followup";
-    if (shouldBeInert && state.mainWindow && !state.mainWindow.isDestroyed()) {
-      // Immediately blur to prevent focus stealing
-      state.mainWindow.blur();
-      // Aggressively re-apply state
-      state.mainWindow.setSkipTaskbar(true);
-      state.mainWindow.setSkipTaskbar(true);
-      state.mainWindow.setFocusable(false);
-      state.mainWindow.setFocusable(false);
-      state.mainWindow.setIgnoreMouseEvents(true);
-      applyInteractivityState();
-    } else if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-      // Even for non-inert views, ensure we don't steal focus unnecessarily
-      // Only allow focus in initial view and normal mode
-      if (state.view !== "initial" || state.mode !== "normal") {
-        state.mainWindow.blur();
-        applyInteractivityState();
-      }
-    }
-  });
-  
-  // CRITICAL: Also prevent focus on window-created event
-  state.mainWindow.once("ready-to-show", () => {
-    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-      const shouldBeInert = state.mode === "stealth" || 
-                           state.view === "response" || 
-                           state.view === "followup";
-      if (shouldBeInert && !isInteractiveOverrideEnabled()) {
-        state.mainWindow.setFocusable(false);
-        state.mainWindow.setFocusable(false);
-        state.mainWindow.setSkipTaskbar(true);
-        state.mainWindow.setSkipTaskbar(true);
-        if (state.mainWindow.isFocused()) {
-          state.mainWindow.blur();
-        }
-      }
-    }
-  });
-
-  state.mainWindow.on("move", handleWindowMove);
-  state.mainWindow.on("resize", handleWindowResize);
-  state.mainWindow.on("closed", handleWindowClosed);
-
+  // Track state
+  state.isWindowVisible = true;
   const bounds = state.mainWindow.getBounds();
   state.windowPosition = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
   state.windowSize = { width: bounds.width, height: bounds.height };
-  state.isWindowVisible = true;
 
-  console.log(`[FIXED] Window created: ${bounds.width}x${bounds.height}`);
+  // DEFERRED: Set up everything else after window is visible
+  setImmediate(() => {
+    if (!state.mainWindow || state.mainWindow.isDestroyed()) return;
+    
+    state.mainWindow.webContents.setFrameRate(30);
+    state.mainWindow.setContentProtection(true);
+    state.mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    
+    if (process.platform === "darwin") {
+      app.dock.hide();
+      state.mainWindow.setHiddenInMissionControl(true);
+    }
+
+    // Event listeners
+    state.mainWindow.webContents.on("did-finish-load", () => {
+      applyInteractivityState();
+    });
+
+    state.mainWindow.webContents.on("did-fail-load", (event: any, errorCode: number, errorDescription: string) => {
+      console.error("Window failed to load:", errorCode, errorDescription);
+      setTimeout(() => {
+        if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+          state.mainWindow.loadFile(path.join(__dirname, "../dist/index.html")).catch(() => {});
+        }
+      }, 1000);
+    });
+
+    state.mainWindow.on("show", () => applyInteractivityState());
+    
+    state.mainWindow.on("focus", () => {
+      if (isInteractiveOverrideEnabled()) return;
+      const shouldBeInert = state.mode === "stealth" || state.view === "response" || state.view === "followup";
+      if (shouldBeInert && state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.blur();
+        applyInteractivityState();
+      }
+    });
+    
+    state.mainWindow.once("ready-to-show", () => {
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        const shouldBeInert = state.mode === "stealth" || state.view === "response" || state.view === "followup";
+        if (shouldBeInert && !isInteractiveOverrideEnabled()) {
+          state.mainWindow.setFocusable(false);
+          state.mainWindow.setSkipTaskbar(true);
+          if (state.mainWindow.isFocused()) state.mainWindow.blur();
+        }
+      }
+    });
+
+    state.mainWindow.on("move", handleWindowMove);
+    state.mainWindow.on("resize", handleWindowResize);
+    state.mainWindow.on("closed", handleWindowClosed);
+  });
 
   return state.mainWindow;
 }
@@ -1238,90 +1203,84 @@ async function loadEnvVariables() {
 }
 
 async function initializeApp() {
-  try {
-    // PERFORMANCE: Set stealth mode and remove menu immediately (no await needed)
-    state.mode = "stealth";
-    try { Menu.setApplicationMenu(null); } catch {}
-    
-    // PERFORMANCE: Initialize helpers synchronously - they don't need async
-    initializeHelpers();
-    
-    // PERFORMANCE: Initialize IPC handlers immediately
-    initializeIpcHandlers({
-      getMainWindow: () => state.mainWindow,
-      setWindowDimensions,
-      getScreenshotQueue: () => state.screenshotHelper?.getScreenshotQueue() || [],
-      getExtraScreenshotQueue: () => state.screenshotHelper?.getExtraScreenshotQueue() || [],
-      processingHelper: state.processingHelper,
-      takeScreenshot: async () => {
-        if (!state.screenshotHelper) return "";
-        return await state.screenshotHelper.takeScreenshot();
-      },
-      toggleMainWindow,
-      clearQueues,
-      setView,
-      moveWindowLeft: () => moveWindowSmooth(-state.step, 0),
-      moveWindowRight: () => moveWindowSmooth(state.step, 0),
-      moveWindowUp: () => moveWindowSmooth(0, -state.step),
-      moveWindowDown: () => moveWindowSmooth(0, state.step),
-      quitApplication,
-      getView: () => state.view,
-      createWindow,
-      PROCESSING_EVENTS: state.PROCESSING_EVENTS,
-      setHasFollowedUp: (value) => { state.hasFollowedUp = value; },
-      clearLockedResponseWidth,
-      getLockedResponseWidth,
-      enableInteractiveOverride,
-      disableInteractiveOverride,
-      isInteractiveOverrideEnabled,
-    });
-    
-    // PERFORMANCE: Create and show window FIRST - user sees UI immediately
-    createWindow();
-    
-    // PERFORMANCE: Register shortcuts immediately
+  // =========================================================================
+  // PHASE 1: INSTANT - Create and show window immediately (< 100ms)
+  // =========================================================================
+  state.mode = "stealth";
+  try { Menu.setApplicationMenu(null); } catch {}
+  
+  // Create window FIRST - this is what the user sees
+  createWindow();
+  
+  // =========================================================================
+  // PHASE 2: BACKGROUND - Everything else runs after window is visible
+  // =========================================================================
+  setImmediate(() => {
     try {
-      state.shortcutsHelper?.registerGlobalShortcuts();
+      // Initialize helpers
+      initializeHelpers();
+      
+      // Initialize IPC handlers
+      initializeIpcHandlers({
+        getMainWindow: () => state.mainWindow,
+        setWindowDimensions,
+        getScreenshotQueue: () => state.screenshotHelper?.getScreenshotQueue() || [],
+        getExtraScreenshotQueue: () => state.screenshotHelper?.getExtraScreenshotQueue() || [],
+        processingHelper: state.processingHelper,
+        takeScreenshot: async () => {
+          if (!state.screenshotHelper) return "";
+          return await state.screenshotHelper.takeScreenshot();
+        },
+        toggleMainWindow,
+        clearQueues,
+        setView,
+        moveWindowLeft: () => moveWindowSmooth(-state.step, 0),
+        moveWindowRight: () => moveWindowSmooth(state.step, 0),
+        moveWindowUp: () => moveWindowSmooth(0, -state.step),
+        moveWindowDown: () => moveWindowSmooth(0, state.step),
+        quitApplication,
+        getView: () => state.view,
+        createWindow,
+        PROCESSING_EVENTS: state.PROCESSING_EVENTS,
+        setHasFollowedUp: (value) => { state.hasFollowedUp = value; },
+        clearLockedResponseWidth,
+        getLockedResponseWidth,
+        enableInteractiveOverride,
+        disableInteractiveOverride,
+        isInteractiveOverrideEnabled,
+      });
+      
+      // Register shortcuts
+      try {
+        state.shortcutsHelper?.registerGlobalShortcuts();
+      } catch (error) {
+        console.error("Global shortcut registration failed:", error);
+      }
     } catch (error) {
-      console.error("Global shortcut registration failed:", error);
+      console.error("Error in phase 2 initialization:", error);
     }
-
-    // PERFORMANCE: Defer all slow async operations to background
-    // These run AFTER the window is visible
+    
+    // =========================================================================
+    // PHASE 3: SLOW ASYNC - File I/O and network (can take seconds)
+    // =========================================================================
     setImmediate(async () => {
       try {
-        // Initialize store in background
         await initializeStore();
-        
-        // Load env variables in background
         await loadEnvVariables();
         
-        // Set default counter endpoint if not already configured (non-blocking)
+        // Counter endpoint setup (fire and forget)
         getStoreValue("stats-server-endpoint").then(async (existingEndpoint) => {
           if (!existingEndpoint) {
-            const defaultEndpoint = "https://phantom-counter.inulute.workers.dev";
-            await setStoreValue("stats-server-endpoint", defaultEndpoint);
-            console.log("[Main] Default counter endpoint configured:", defaultEndpoint);
-          } else {
-            console.log("[Main] Using existing counter endpoint:", existingEndpoint);
+            await setStoreValue("stats-server-endpoint", "https://phantom-counter.inulute.workers.dev");
           }
-          
-          // Increment app open counter (non-blocking)
-          incrementAppOpenCounter().catch((error) => {
-            console.error("[Main] Failed to increment app open counter:", error);
-          });
-        }).catch((error) => {
-          console.error("[Main] Error checking counter endpoint:", error);
-        });
+          incrementAppOpenCounter().catch(() => {});
+        }).catch(() => {});
         
       } catch (error) {
-        console.error("[Main] Background initialization error:", error);
+        console.error("Error in phase 3 initialization:", error);
       }
     });
-
-  } catch (error) {
-    console.error("Error initializing app:", error);
-  }
+  });
 }
 
 async function setPersistedMode(mode: "normal"|"stealth"): Promise<void> {
