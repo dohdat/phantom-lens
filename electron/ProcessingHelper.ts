@@ -99,45 +99,18 @@ export class ProcessingHelper {
       const view = this.deps.getView();
 
       if (view === "initial") {
-        // CRITICAL: Apply taskbar prevention IMMEDIATELY when initial processing starts
-        // This prevents taskbar from appearing before setView("response") is called
-        // Set it MANY times synchronously to prevent even millisecond flashes
+        // PERFORMANCE: Set properties once before processing starts
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setFocusable(false);
-          mainWindow.setFocusable(false);
-          mainWindow.setFocusable(false);
           mainWindow.setFocusable(false);
           mainWindow.setIgnoreMouseEvents(true);
           if (mainWindow.isFocused()) {
             mainWindow.blur();
           }
-          
-          // Use process.nextTick to set it before event loop continues
-          process.nextTick(() => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.setSkipTaskbar(true);
-              mainWindow.setSkipTaskbar(true);
-              mainWindow.setFocusable(false);
-              mainWindow.setFocusable(false);
-            }
-          });
         }
         
         mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START);
         
-        // CRITICAL: Set skipTaskbar again immediately after sending IPC message
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setSkipTaskbar(true);
-          mainWindow.setFocusable(false);
-          mainWindow.setFocusable(false);
-        }
         const screenshotQueue = this.screenshotHelper.getScreenshotQueue();
         
         try {
