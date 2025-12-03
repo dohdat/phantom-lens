@@ -1063,7 +1063,7 @@ function createWindow(): BrowserWindow {
   // Load saved position or use defaults
   const savedX = store?.get('window-position-x') as number | undefined;
   const savedY = store?.get('window-position-y') as number | undefined;
-  const defaultX = (workArea.width - 800) / 2 + 200;
+  const defaultX = (workArea.width - 800) / 2 + 400;
   const defaultY = 300;
   
   // Validate saved position is within screen bounds
