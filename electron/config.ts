@@ -19,6 +19,7 @@ export interface AppConfig {
 class SecureConfig {
   private configPath: string;
   private config: AppConfig;
+  private configLoaded: boolean = false;
 
   constructor() {
     // Use phantomlens instead of ikiag for config directory
@@ -29,7 +30,12 @@ class SecureConfig {
 
     this.configPath = path.join(userDataPath, "phantomlens", "config.json");
     this.config = this.getDefaultConfig();
-    this.loadConfig();
+    
+    // PERFORMANCE: Load config in background instead of blocking constructor
+    // Use setImmediate to defer to next event loop tick
+    setImmediate(() => {
+      this.loadConfig();
+    });
   }
 
   private getDefaultConfig(): AppConfig {
@@ -47,6 +53,8 @@ class SecureConfig {
   }
 
   private loadConfig(): void {
+    if (this.configLoaded) return;
+    
     try {
       // Ensure config directory exists
       const configDir = path.dirname(this.configPath);
@@ -81,9 +89,8 @@ class SecureConfig {
           console.warn('Error parsing config file, using defaults:', error);
         }
       }
-
-      // Don't save automatically - let the store system handle writes to prevent race conditions
-      // Only save when explicitly needed (which should be rare)
+      
+      this.configLoaded = true;
     } catch (error) {
       console.error('Error loading config:', error);
       // Use default config if loading fails
@@ -155,18 +162,31 @@ class SecureConfig {
   }
 
   public getConfig(): AppConfig {
+    // Ensure config is loaded before returning
+    if (!this.configLoaded) {
+      this.loadConfig();
+    }
     return this.config;
   }
 
   public getGitHubToken(): string | undefined {
+    if (!this.configLoaded) {
+      this.loadConfig();
+    }
     return this.config.github.token;
   }
 
   public isPrivateRepo(): boolean {
+    if (!this.configLoaded) {
+      this.loadConfig();
+    }
     return this.config.github.private;
   }
 
   public getGitHubConfig() {
+    if (!this.configLoaded) {
+      this.loadConfig();
+    }
     return {
       owner: this.config.github.owner,
       repo: this.config.github.repo,
@@ -176,6 +196,9 @@ class SecureConfig {
   }
 
   public getAppConfig() {
+    if (!this.configLoaded) {
+      this.loadConfig();
+    }
     return this.config.app;
   }
 }
