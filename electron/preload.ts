@@ -367,6 +367,7 @@ const electronAPI = {
   // System Prompt
   getSystemPrompt: () => ipcRenderer.invoke("get-system-prompt"),
   setSystemPrompt: (prompt: string) => ipcRenderer.invoke("set-system-prompt", prompt),
+  getDefaultSystemPrompt: () => ipcRenderer.invoke("get-default-system-prompt"),
   // Usage Counter
   getAppOpenCount: () => ipcRenderer.invoke("get-app-open-count"),
   setStatsServerEndpoint: (endpoint: string) =>

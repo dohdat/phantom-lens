@@ -96,6 +96,11 @@ interface Window {
       success: boolean;
       error?: string;
     }>;
+    getDefaultSystemPrompt: () => Promise<{
+      success: boolean;
+      data?: { prompt: string };
+      error?: string;
+    }>;
     // Update check
     checkGitHubUpdate: () => Promise<{
       success: boolean;

@@ -940,6 +940,10 @@ export class ProcessingHelper {
     ];
   }
 
+  public getDefaultSystemPrompt(): string {
+    return this.getDefaultPromptLines().join('\n');
+  }
+
   private getDefaultFollowUpPromptLines(): string[] {
     return [
       `You are an expert assistant tasked with solving the follow-up issue shown in the images.`,

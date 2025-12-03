@@ -927,6 +927,16 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "set-system-prompt"));
 
+  ipcMain.handle("get-default-system-prompt", createSafeIpcHandler(async () => {
+    try {
+      const defaultPrompt = deps.processingHelper?.getDefaultSystemPrompt() || "";
+      return { success: true, data: { prompt: defaultPrompt } };
+    } catch (error: any) {
+      console.error("Error getting default system prompt:", error);
+      return { success: false, error: "Failed to get default system prompt" };
+    }
+  }, "get-default-system-prompt"));
+
 
 
   console.log("FIXED: All IPC handlers initialized successfully with DIRECT dimension updates (NO BATCHING)");

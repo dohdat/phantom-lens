@@ -153,6 +153,12 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         const promptResponse = await window.electronAPI.getSystemPrompt?.();
         if (promptResponse?.success && promptResponse.data?.prompt) {
           setSystemPrompt(promptResponse.data.prompt);
+        } else {
+          // No custom prompt set, load the default prompt for display
+          const defaultPromptResponse = await window.electronAPI.getDefaultSystemPrompt?.();
+          if (defaultPromptResponse?.success && defaultPromptResponse.data?.prompt) {
+            setSystemPrompt(defaultPromptResponse.data.prompt);
+          }
         }
       } catch (e) {
         console.warn("Failed to load system prompt:", e);
@@ -874,7 +880,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    placeholder="Enter custom system prompt... (leave empty for default)"
+                    placeholder="Enter custom system prompt..."
                     rows={8}
                     className={`w-full px-3 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 resize-none ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
@@ -902,20 +908,28 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       Save Prompt
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!isInteractive) return;
-                        setSystemPrompt("");
+                        try {
+                          // Load default prompt from backend
+                          const defaultPromptResponse = await window.electronAPI.getDefaultSystemPrompt?.();
+                          if (defaultPromptResponse?.success && defaultPromptResponse.data?.prompt) {
+                            setSystemPrompt(defaultPromptResponse.data.prompt);
+                          }
+                        } catch (e) {
+                          console.error("Failed to load default prompt:", e);
+                        }
                       }}
                       disabled={!isInteractive}
                       tabIndex={isInteractive ? 0 : -1}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
                       style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
                     >
-                      Reset
+                      Reset to Default
                     </button>
                   </div>
                   <p className="text-[10px] text-white/50 leading-relaxed">
-                    Customize the AI system prompt. Leave empty to use the default interview-focused prompt.
+                    Customize the AI system prompt. Click "Reset to Default" to restore the default interview-focused prompt.
                   </p>
                 </div>
               )}
