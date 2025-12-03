@@ -81,6 +81,12 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
     latestVersion: string;
     releaseUrl?: string;
   } | null>(null);
+  // Auto-update state
+  const [autoUpdateStatus, setAutoUpdateStatus] = useState<{
+    status: "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+    version?: string;
+    percent?: number;
+  } | null>(null);
   // Always in stealth mode - no mode variable needed
   const isVisibleRef = useRef(isVisible);
   const isInteractiveRef = useRef(isInteractive);
@@ -294,6 +300,47 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       cleanup?.();
     };
   }, [updateInfo]);
+
+  // Listen for auto-update events
+  useEffect(() => {
+    const cleanupProgress = window.electronAPI?.onAutoUpdateProgress?.((progress) => {
+      setAutoUpdateStatus(prev => ({
+        ...prev,
+        status: "downloading",
+        percent: progress.percent
+      }));
+    });
+
+    const cleanupDownloaded = window.electronAPI?.onAutoUpdateDownloaded?.((info) => {
+      setAutoUpdateStatus({
+        status: "downloaded",
+        version: info.version
+      });
+    });
+
+    const cleanupError = window.electronAPI?.onAutoUpdateError?.((error) => {
+      console.error("Auto-update error:", error.message);
+      setAutoUpdateStatus({
+        status: "error"
+      });
+    });
+
+    // Check initial auto-update status
+    window.electronAPI?.getAutoUpdateStatus?.().then((result) => {
+      if (result?.success && result.data) {
+        setAutoUpdateStatus({
+          status: result.data.status,
+          version: result.data.version
+        });
+      }
+    }).catch(() => {});
+
+    return () => {
+      cleanupProgress?.();
+      cleanupDownloaded?.();
+      cleanupError?.();
+    };
+  }, []);
 
   // Save configuration handler
   const handleSaveConfig = useCallback(async () => {
@@ -728,44 +775,93 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
             </div>
 
             {/* Update Available Notification */}
-            {updateInfo?.updateAvailable && (
+            {(updateInfo?.updateAvailable || autoUpdateStatus?.status === "downloading" || autoUpdateStatus?.status === "downloaded") && (
               <div className="mb-4">
                 <div 
-                  className={`rounded-lg px-4 py-3 ${isTransparent ? '' : 'bg-blue-500/15 border border-blue-400/30'}`}
+                  className={`rounded-lg px-4 py-3 ${isTransparent ? '' : autoUpdateStatus?.status === "downloaded" ? 'bg-green-500/15 border border-green-400/30' : 'bg-blue-500/15 border border-blue-400/30'}`}
                   style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
                 >
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-blue-300">●</span>
+                    <span className={`mt-0.5 ${autoUpdateStatus?.status === "downloaded" ? 'text-green-300' : 'text-blue-300'}`}>●</span>
                     <div className="flex-1">
-                      <div className="font-medium text-blue-200 text-[11px] uppercase tracking-wide mb-1">Update Available</div>
-                      <div className="text-xs leading-relaxed text-blue-100/90 mb-2">
-                        Version <span className="font-semibold">{updateInfo.latestVersion}</span> is now available. Download from{' '}
-                        <span className="underline font-semibold text-sm">ph.inulute.com/dl</span>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (!isInteractive) return;
-                          const downloadUrl = updateInfo.releaseUrl || 'https://ph.inulute.com/dl';
-                          try {
-                            await window.electronAPI?.openUpdateDownload?.(downloadUrl);
-                          } catch (error) {
-                            console.error("Error opening update download:", error);
-                          }
-                        }}
-                        disabled={!isInteractive}
-                        tabIndex={isInteractive ? 0 : -1}
-                        className={`w-full px-4 py-2 text-blue-100 text-xs font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 ${isTransparent ? '' : 'bg-blue-500/20 border border-blue-400/40'} ${
-                          isInteractive 
-                            ? isTransparent ? 'hover:bg-transparent hover:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500/20' : 'hover:bg-blue-500/30 hover:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
-                            : 'cursor-default'
-                        }`}
-                        style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Download Update (Ctrl/Cmd + Shift + U)
-                      </button>
+                      {autoUpdateStatus?.status === "downloaded" ? (
+                        <>
+                          <div className="font-medium text-green-200 text-[11px] uppercase tracking-wide mb-1">Update Ready to Install</div>
+                          <div className="text-xs leading-relaxed text-green-100/90 mb-2">
+                            Version <span className="font-semibold">{autoUpdateStatus.version || updateInfo?.latestVersion}</span> has been downloaded and is ready to install.
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!isInteractive) return;
+                              try {
+                                await window.electronAPI?.installAutoUpdate?.();
+                              } catch (error) {
+                                console.error("Error installing update:", error);
+                              }
+                            }}
+                            disabled={!isInteractive}
+                            tabIndex={isInteractive ? 0 : -1}
+                            className={`w-full px-4 py-2 text-green-100 text-xs font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 ${isTransparent ? '' : 'bg-green-500/20 border border-green-400/40'} ${
+                              isInteractive 
+                                ? isTransparent ? 'hover:bg-transparent hover:border-transparent focus:outline-none focus:ring-2 focus:ring-green-500/20' : 'hover:bg-green-500/30 hover:border-green-400/60 focus:outline-none focus:ring-2 focus:ring-green-500/20'
+                                : 'cursor-default'
+                            }`}
+                            style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Restart & Install Update
+                          </button>
+                        </>
+                      ) : autoUpdateStatus?.status === "downloading" ? (
+                        <>
+                          <div className="font-medium text-blue-200 text-[11px] uppercase tracking-wide mb-1">Downloading Update</div>
+                          <div className="text-xs leading-relaxed text-blue-100/90 mb-2">
+                            Downloading version <span className="font-semibold">{autoUpdateStatus.version || updateInfo?.latestVersion}</span>...
+                          </div>
+                          <div className="w-full h-2 bg-blue-900/50 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-400 transition-all duration-300"
+                              style={{ width: `${autoUpdateStatus.percent || 0}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-blue-200/70 mt-1 text-center">
+                            {(autoUpdateStatus.percent || 0).toFixed(1)}% complete
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-medium text-blue-200 text-[11px] uppercase tracking-wide mb-1">Update Available</div>
+                          <div className="text-xs leading-relaxed text-blue-100/90 mb-2">
+                            Version <span className="font-semibold">{updateInfo?.latestVersion}</span> is now available. The update will download automatically.
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!isInteractive) return;
+                              const downloadUrl = updateInfo?.releaseUrl || 'https://ph.inulute.com/dl';
+                              try {
+                                await window.electronAPI?.openUpdateDownload?.(downloadUrl);
+                              } catch (error) {
+                                console.error("Error opening update download:", error);
+                              }
+                            }}
+                            disabled={!isInteractive}
+                            tabIndex={isInteractive ? 0 : -1}
+                            className={`w-full px-4 py-2 text-blue-100 text-xs font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 ${isTransparent ? '' : 'bg-blue-500/20 border border-blue-400/40'} ${
+                              isInteractive 
+                                ? isTransparent ? 'hover:bg-transparent hover:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500/20' : 'hover:bg-blue-500/30 hover:border-blue-400/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                                : 'cursor-default'
+                            }`}
+                            style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download Manually
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -131,6 +131,32 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  // Auto Update
+  checkForAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+  downloadAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+  installAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+  getAutoUpdateStatus: () => Promise<{
+    success: boolean;
+    data?: {
+      status: "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+      version?: string;
+      error?: string;
+    };
+    error?: string;
+  }>;
+  onAutoUpdateProgress: (callback: (progress: {
+    percent: number;
+    bytesPerSecond: number;
+    transferred: number;
+    total: number;
+  }) => void) => () => void;
+  onAutoUpdateDownloaded: (callback: (info: {
+    version: string;
+    releaseNotes?: string;
+    releaseName?: string;
+    releaseDate?: string;
+  }) => void) => () => void;
+  onAutoUpdateError: (callback: (error: { message: string }) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -368,6 +394,32 @@ const electronAPI = {
   getSystemPrompt: () => ipcRenderer.invoke("get-system-prompt"),
   setSystemPrompt: (prompt: string) => ipcRenderer.invoke("set-system-prompt", prompt),
   getDefaultSystemPrompt: () => ipcRenderer.invoke("get-default-system-prompt"),
+  // Auto Update
+  checkForAutoUpdate: () => ipcRenderer.invoke("check-for-auto-update"),
+  downloadAutoUpdate: () => ipcRenderer.invoke("download-auto-update"),
+  installAutoUpdate: () => ipcRenderer.invoke("install-auto-update"),
+  getAutoUpdateStatus: () => ipcRenderer.invoke("get-auto-update-status"),
+  onAutoUpdateProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => {
+    const subscription = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on("auto-update-progress", subscription);
+    return () => {
+      ipcRenderer.removeListener("auto-update-progress", subscription);
+    };
+  },
+  onAutoUpdateDownloaded: (callback: (info: { version: string; releaseNotes?: string; releaseName?: string; releaseDate?: string }) => void) => {
+    const subscription = (_event: any, info: any) => callback(info);
+    ipcRenderer.on("auto-update-downloaded", subscription);
+    return () => {
+      ipcRenderer.removeListener("auto-update-downloaded", subscription);
+    };
+  },
+  onAutoUpdateError: (callback: (error: { message: string }) => void) => {
+    const subscription = (_event: any, error: any) => callback(error);
+    ipcRenderer.on("auto-update-error", subscription);
+    return () => {
+      ipcRenderer.removeListener("auto-update-error", subscription);
+    };
+  },
   // Usage Counter
   getAppOpenCount: () => ipcRenderer.invoke("get-app-open-count"),
   setStatsServerEndpoint: (endpoint: string) =>

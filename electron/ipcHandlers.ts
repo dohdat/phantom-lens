@@ -937,7 +937,59 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "get-default-system-prompt"));
 
+  // ============================================================================
+  // Auto Update Handlers
+  // ============================================================================
+  ipcMain.handle("check-for-auto-update", createSafeIpcHandler(async () => {
+    try {
+      const { autoUpdaterService } = await import("./AutoUpdater");
+      await autoUpdaterService.checkForUpdates();
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error checking for auto update:", error);
+      return { success: false, error: error.message || "Failed to check for updates" };
+    }
+  }, "check-for-auto-update"));
 
+  ipcMain.handle("download-auto-update", createSafeIpcHandler(async () => {
+    try {
+      const { autoUpdaterService } = await import("./AutoUpdater");
+      await autoUpdaterService.downloadUpdate();
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error downloading auto update:", error);
+      return { success: false, error: error.message || "Failed to download update" };
+    }
+  }, "download-auto-update"));
+
+  ipcMain.handle("install-auto-update", createSafeIpcHandler(async () => {
+    try {
+      const { autoUpdaterService } = await import("./AutoUpdater");
+      autoUpdaterService.quitAndInstall();
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error installing auto update:", error);
+      return { success: false, error: error.message || "Failed to install update" };
+    }
+  }, "install-auto-update"));
+
+  ipcMain.handle("get-auto-update-status", createSafeIpcHandler(async () => {
+    try {
+      const { autoUpdaterService } = await import("./AutoUpdater");
+      const status = autoUpdaterService.getStatus();
+      return { 
+        success: true, 
+        data: { 
+          status: status.status,
+          version: status.info?.version,
+          error: status.error
+        } 
+      };
+    } catch (error: any) {
+      console.error("Error getting auto update status:", error);
+      return { success: false, error: error.message || "Failed to get update status" };
+    }
+  }, "get-auto-update-status"));
 
   console.log("FIXED: All IPC handlers initialized successfully with DIRECT dimension updates (NO BATCHING)");
 }

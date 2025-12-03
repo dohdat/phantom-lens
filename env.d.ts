@@ -117,6 +117,32 @@ interface Window {
     }>;
     openUpdateDownload: (url?: string) => Promise<{ success: boolean; error?: string }>;
     onDownloadUpdate: (callback: (url?: string) => void) => () => void;
+    // Auto Update
+    checkForAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+    downloadAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+    installAutoUpdate: () => Promise<{ success: boolean; error?: string }>;
+    getAutoUpdateStatus: () => Promise<{
+      success: boolean;
+      data?: {
+        status: "checking" | "available" | "not-available" | "downloading" | "downloaded" | "error";
+        version?: string;
+        error?: string;
+      };
+      error?: string;
+    }>;
+    onAutoUpdateProgress: (callback: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }) => void) => () => void;
+    onAutoUpdateDownloaded: (callback: (info: {
+      version: string;
+      releaseNotes?: string;
+      releaseName?: string;
+      releaseDate?: string;
+    }) => void) => () => void;
+    onAutoUpdateError: (callback: (error: { message: string }) => void) => () => void;
     // Usage Counter
     getAppOpenCount: () => Promise<{
       success: boolean;

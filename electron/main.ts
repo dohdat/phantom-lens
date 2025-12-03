@@ -1268,6 +1268,17 @@ async function initializeApp() {
         await initializeStore();
         await loadEnvVariables();
         
+        // Initialize auto-updater (only in packaged app)
+        if (app.isPackaged && state.mainWindow) {
+          try {
+            const { autoUpdaterService } = await import("./AutoUpdater");
+            autoUpdaterService.initialize(state.mainWindow);
+            console.log("[Main] Auto-updater initialized");
+          } catch (error) {
+            console.error("[Main] Failed to initialize auto-updater:", error);
+          }
+        }
+        
         // Counter endpoint setup (fire and forget)
         getStoreValue("stats-server-endpoint").then(async (existingEndpoint) => {
           if (!existingEndpoint) {

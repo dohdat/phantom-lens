@@ -112,6 +112,12 @@
         "schemes": [
           "phantomlens"
         ]
+      },
+      "publish": {
+        "provider": "github",
+        "owner": "dohdat",
+        "repo": "phantom-lens",
+        "releaseType": "release"
       }
     },
     "linux": {

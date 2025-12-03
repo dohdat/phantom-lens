@@ -27,8 +27,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows executable
+      - name: Build Windows executable (dev)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: npx cross-env NODE_ENV=production rimraf dist dist-electron && npx vite build && npx tsc -p tsconfig.electron.json && npx electron-builder --win --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Publish Windows executable (release)
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: npx cross-env NODE_ENV=production rimraf dist dist-electron && npx vite build && npx tsc -p tsconfig.electron.json && npx electron-builder --win --publish=always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,14 +43,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/latest.yml
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: softprops/action-gh-release@v1
         with:
-          files: release/*.exe
-          draft: true
+          files: |
+            release/*.exe
+            release/latest.yml
+          draft: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
