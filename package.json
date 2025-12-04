@@ -120,7 +120,7 @@
       },
       "extraResources": [
         {
-          "from": "native/phantom-audio/build/bin/phantom-audio.exe",
+          "from": "native/phantom-audio/build/bin/Release/phantom-audio.exe",
           "to": "phantom-audio.exe"
         },
         {
