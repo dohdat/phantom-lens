@@ -144,13 +144,13 @@ export default function Commands({
   const commands = [
     {
       id: "show-hide",
-      label: "Show/Hide",
+      label: "Toggle",
       keys: [COMMAND_KEY, "\\"],
       show: true,
     },
     {
       id: "transparent",
-      label: "Transparent",
+      label: "Ghost",
       keys: [COMMAND_KEY, "⇧", "V"],
       show: true,
     },
@@ -164,12 +164,6 @@ export default function Commands({
       id: "move",
       label: "Move",
       keys: [COMMAND_KEY, "←→↑↓"],
-      show: true,
-    },
-    {
-      id: "history",
-      label: "History",
-      keys: [COMMAND_KEY, "⇧", "↑↓"],
       show: true,
     },
     {

@@ -22,6 +22,9 @@
     "publish:linux": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --linux --publish=always",
     "release": "npm run publish",
     "release:draft": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:check && vite build && tsc -p tsconfig.electron.json && electron-builder --publish=onTagOrDraft",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags",
     "package": "npm run build && electron-builder build",
     "package-mac": "npm run build && electron-builder build --mac",
     "package-win": "npm run build && electron-builder build --win"
