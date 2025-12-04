@@ -2,6 +2,7 @@
 #include "audio_resampler.h"
 #include <iostream>
 #include <cstring>
+#include <string>
 
 namespace phantom {
 

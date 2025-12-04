@@ -163,9 +163,8 @@ std::string WhisperWrapper::transcribe(const std::vector<float>& samples) {
     params.no_context = true;
     params.single_segment = true;
     
-    // Suppress non-speech tokens
+    // Suppress blank tokens
     params.suppress_blank = true;
-    params.suppress_non_speech_tokens = true;
 
     // Run inference
     auto start = std::chrono::high_resolution_clock::now();

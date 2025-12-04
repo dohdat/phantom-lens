@@ -64,6 +64,7 @@ jobs:
 
       - name: Build phantom-audio
         if: steps.cache-phantom-audio.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           cd native/phantom-audio
           mkdir -p build
