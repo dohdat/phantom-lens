@@ -62,10 +62,34 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
 
     const handleTranscript = (msg: TranscriptMessage) => {
       console.log("[MeetingAssistant] Transcript:", msg.type, msg.text);
+      
+      // Filter out Whisper's special tokens for blank/silence/music
+      const text = msg.text?.trim() || "";
+      if (!text) return;
+      
+      const isNonSpeech = 
+        text === "[Blank_Audio]" || text === "[BLANK_AUDIO]" ||
+        text.toLowerCase().includes("blank audio") ||
+        text === "[Music]" || text === "[MUSIC]" ||
+        text.toLowerCase().includes("music") && text.length < 20 ||
+        text === "[Silence]" || text === "[SILENCE]" ||
+        text === "..." || 
+        (text.startsWith("[") && text.endsWith("]") && text.length < 30) ||
+        (text.startsWith("(") && text.endsWith(")") && text.length < 30);
+      
+      if (isNonSpeech) {
+        console.log("[MeetingAssistant] Filtered non-speech:", text);
+        return;
+      }
+
       if (msg.type === "partial") {
-        setCurrentPartial(msg.text);
-      } else if (msg.type === "final") {
-        setTranscript((prev) => prev + (prev ? " " : "") + msg.text);
+        setCurrentPartial(text);
+      } else if (msg.type === "final" && text.length > 0) {
+        setTranscript((prev) => {
+          const newTranscript = prev + (prev ? " " : "") + text;
+          console.log("[MeetingAssistant] Updated transcript:", newTranscript);
+          return newTranscript;
+        });
         setCurrentPartial("");
       }
     };
@@ -96,6 +120,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         const newContent = fullText.slice(lastProcessedLength.current).trim();
         if (newContent.length >= 30) {
           console.log("[MeetingAssistant] Silence detected, sending to Gemini...");
+          console.log("[MeetingAssistant] Transcript to send:", fullText);
           setIsProcessing(true);
           lastProcessedLength.current = fullText.length;
 
@@ -113,9 +138,17 @@ Conversation transcript:
 
 Suggest questions:`;
 
-            await (window as any).electronAPI?.setUserPrompt(meetingPrompt);
-            await (window as any).electronAPI?.triggerScreenshot();
-            await (window as any).electronAPI?.triggerProcessScreenshots();
+            console.log("[MeetingAssistant] Setting user prompt...");
+            const promptResult = await (window as any).electronAPI?.setUserPrompt(meetingPrompt);
+            console.log("[MeetingAssistant] setUserPrompt result:", promptResult);
+            
+            console.log("[MeetingAssistant] Taking screenshot...");
+            const screenshotResult = await (window as any).electronAPI?.triggerScreenshot();
+            console.log("[MeetingAssistant] triggerScreenshot result:", screenshotResult);
+            
+            console.log("[MeetingAssistant] Processing...");
+            const processResult = await (window as any).electronAPI?.triggerProcessScreenshots();
+            console.log("[MeetingAssistant] triggerProcessScreenshots result:", processResult);
           } catch (err) {
             console.error("[MeetingAssistant] Failed to send to Gemini:", err);
           } finally {
