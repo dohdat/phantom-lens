@@ -38,6 +38,7 @@ jobs:
 
       - name: Download Whisper model
         if: steps.cache-whisper.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           mkdir -p resources/models/whisper
           curl -L -o resources/models/whisper/ggml-small.en.q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin
@@ -51,6 +52,7 @@ jobs:
 
       - name: Clone whisper.cpp
         if: steps.cache-whisper-cpp.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           cd native/phantom-audio
           git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
