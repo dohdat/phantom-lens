@@ -23,6 +23,9 @@ interface SystemAudioAPI {
   /** Stop capture (but keep process running) */
   stop: () => Promise<{ success: boolean; error?: string }>;
   
+  /** Toggle capture on/off */
+  toggle: () => Promise<{ success: boolean; isCapturing?: boolean; error?: string }>;
+  
   /** Shutdown the audio process completely */
   shutdown: () => Promise<{ success: boolean; error?: string }>;
   
@@ -54,6 +57,9 @@ interface SystemAudioAPI {
   
   /** Subscribe to error events */
   onError: (callback: (error: { message: string }) => void) => () => void;
+  
+  /** Subscribe to toggle events (from keyboard shortcuts) */
+  onToggled: (callback: (data: { isCapturing: boolean }) => void) => () => void;
 }
 
 declare global {

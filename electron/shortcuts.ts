@@ -1,5 +1,6 @@
 import { app, globalShortcut, screen } from "electron";
 import { IShortcutsHelperDeps } from "./main";
+import { systemAudioHelper } from "./SystemAudioHelper";
 
 export class ShortcutsHelper {
   private deps: IShortcutsHelperDeps;
@@ -151,6 +152,25 @@ export class ShortcutsHelper {
         const mainWindow = this.deps.getMainWindow();
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("toggle-transparency");
+        }
+      },
+      // Toggle system audio capture - Ctrl/Cmd + Shift + A
+      "CommandOrControl+Shift+A": async () => {
+        console.log("Command/Ctrl + Shift + A pressed. Toggling system audio capture...");
+        if (process.platform === "win32") {
+          try {
+            await systemAudioHelper.toggle();
+            const isCapturing = systemAudioHelper.isCapturing();
+            console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"}`);
+            const mainWindow = this.deps.getMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("system-audio:toggled", { isCapturing });
+            }
+          } catch (error) {
+            console.error("[SystemAudio] Toggle failed:", error);
+          }
+        } else {
+          console.log("[SystemAudio] System audio capture only available on Windows");
         }
       },
     };

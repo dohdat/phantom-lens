@@ -33,6 +33,24 @@ export class SystemAudioHelper {
   constructor() {}
 
   /**
+   * Check if currently capturing
+   */
+  isCapturing(): boolean {
+    return this.state.isCapturing;
+  }
+
+  /**
+   * Toggle audio capture on/off
+   */
+  async toggle(): Promise<void> {
+    if (this.state.isCapturing) {
+      await this.stop();
+    } else {
+      await this.start();
+    }
+  }
+
+  /**
    * Initialize the system audio helper with a window reference
    */
   initialize(window: BrowserWindow): void {
@@ -124,6 +142,19 @@ export class SystemAudioHelper {
         return { success: true };
       } catch (error: any) {
         console.error("[SystemAudio] Stop error:", error);
+        return { success: false, error: error.message || String(error) };
+      }
+    });
+
+    // Toggle system audio capture
+    ipcMain.handle("system-audio:toggle", async () => {
+      try {
+        await this.toggle();
+        // Emit toggled event to notify the renderer
+        this.sendToRenderer("system-audio:toggled", { isCapturing: this.state.isCapturing });
+        return { success: true, isCapturing: this.state.isCapturing };
+      } catch (error: any) {
+        console.error("[SystemAudio] Toggle error:", error);
         return { success: false, error: error.message || String(error) };
       }
     });

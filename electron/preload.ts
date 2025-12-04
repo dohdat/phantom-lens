@@ -169,6 +169,7 @@ interface ElectronAPI {
 interface SystemAudioAPI {
   start: () => Promise<{ success: boolean; error?: string }>;
   stop: () => Promise<{ success: boolean; error?: string }>;
+  toggle: () => Promise<{ success: boolean; isCapturing?: boolean; error?: string }>;
   shutdown: () => Promise<{ success: boolean; error?: string }>;
   getState: () => Promise<{
     success: boolean;
@@ -185,6 +186,7 @@ interface SystemAudioAPI {
   onStopped: (callback: () => void) => () => void;
   onReady: (callback: () => void) => () => void;
   onError: (callback: (error: { message: string }) => void) => () => void;
+  onToggled: (callback: (data: { isCapturing: boolean }) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -460,6 +462,7 @@ const electronAPI = {
 const systemAudioAPI: SystemAudioAPI = {
   start: () => ipcRenderer.invoke("system-audio:start"),
   stop: () => ipcRenderer.invoke("system-audio:stop"),
+  toggle: () => ipcRenderer.invoke("system-audio:toggle"),
   shutdown: () => ipcRenderer.invoke("system-audio:shutdown"),
   getState: () => ipcRenderer.invoke("system-audio:get-state"),
   checkAvailability: () => ipcRenderer.invoke("system-audio:check-availability"),
@@ -496,6 +499,13 @@ const systemAudioAPI: SystemAudioAPI = {
     ipcRenderer.on("system-audio:error", subscription);
     return () => {
       ipcRenderer.removeListener("system-audio:error", subscription);
+    };
+  },
+  onToggled: (callback: (data: { isCapturing: boolean }) => void) => {
+    const subscription = (_event: any, data: { isCapturing: boolean }) => callback(data);
+    ipcRenderer.on("system-audio:toggled", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:toggled", subscription);
     };
   },
 };
