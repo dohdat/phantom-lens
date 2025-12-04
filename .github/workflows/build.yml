@@ -29,26 +29,49 @@ jobs:
         with:
           arch: x64
 
+      - name: Cache Whisper model
+        id: cache-whisper
+        uses: actions/cache@v4
+        with:
+          path: resources/models/whisper
+          key: whisper-model-ggml-small-en-q5_1
+
+      - name: Download Whisper model
+        if: steps.cache-whisper.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p resources/models/whisper
+          curl -L -o resources/models/whisper/ggml-small.en.q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin
+
+      - name: Cache whisper.cpp
+        id: cache-whisper-cpp
+        uses: actions/cache@v4
+        with:
+          path: native/phantom-audio/whisper.cpp
+          key: whisper-cpp-${{ hashFiles('native/phantom-audio/CMakeLists.txt') }}
+
       - name: Clone whisper.cpp
+        if: steps.cache-whisper-cpp.outputs.cache-hit != 'true'
         run: |
           cd native/phantom-audio
           git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
 
+      - name: Cache phantom-audio build
+        id: cache-phantom-audio
+        uses: actions/cache@v4
+        with:
+          path: native/phantom-audio/build
+          key: phantom-audio-${{ hashFiles('native/phantom-audio/src/**', 'native/phantom-audio/CMakeLists.txt') }}
+
       - name: Build phantom-audio
+        if: steps.cache-phantom-audio.outputs.cache-hit != 'true'
         run: |
           cd native/phantom-audio
-          mkdir build
+          mkdir -p build
           cd build
           cmake .. -G "Visual Studio 17 2022" -A x64
           cmake --build . --config Release
-          # Copy to expected location
           mkdir -p bin
           cp Release/phantom-audio.exe bin/
-
-      - name: Download Whisper model
-        run: |
-          mkdir -p resources/models/whisper
-          curl -L -o resources/models/whisper/ggml-small.en.q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin
 
       - name: Install dependencies
         run: npm install
