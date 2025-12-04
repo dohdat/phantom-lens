@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import Initial from "@/components/initial";
 import Response from "@/components/response";
+import { MeetingAssistantIndicator } from "@/components/shared/MeetingAssistantIndicator";
 import { memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -153,6 +154,8 @@ export default function Main() {
       initial="hidden"
       animate="visible"
     >
+      {/* Meeting Assistant Indicator - shows when audio capture is active */}
+      <MeetingAssistantIndicator />
 
       <AnimatePresence mode="wait" onExitComplete={() => setIsTransitioning(false)}>
         {view === "initial" ? (

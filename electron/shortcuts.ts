@@ -166,8 +166,14 @@ export class ShortcutsHelper {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send("system-audio:toggled", { isCapturing });
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error("[SystemAudio] Toggle failed:", error);
+            const mainWindow = this.deps.getMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("system-audio:error", { 
+                message: error?.message || String(error) 
+              });
+            }
           }
         } else {
           console.log("[SystemAudio] System audio capture only available on Windows");
