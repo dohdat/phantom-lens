@@ -5,6 +5,7 @@ import { ScreenshotHelper } from "./ScreenshotHelper";
 import { ShortcutsHelper } from "./shortcuts";
 import { initializeIpcHandlers } from "./ipcHandlers";
 import { incrementAppOpenCounter } from "./UsageCounter";
+import { systemAudioHelper } from "./SystemAudioHelper";
 import path from "path";
 
 let store: any = null;
@@ -1286,6 +1287,16 @@ async function initializeApp() {
           }
           incrementAppOpenCounter().catch(() => {});
         }).catch(() => {});
+
+        // Initialize system audio helper (Windows only)
+        if (process.platform === "win32" && state.mainWindow) {
+          try {
+            systemAudioHelper.initialize(state.mainWindow);
+            console.log("[Main] System audio helper initialized");
+          } catch (error) {
+            console.error("[Main] Failed to initialize system audio helper:", error);
+          }
+        }
         
       } catch (error) {
         console.error("Error in phase 3 initialization:", error);
@@ -1422,6 +1433,10 @@ app.on("before-quit", () => {
   cleanupAllFiles();
   if (state.screenCaptureHelper) {
     state.screenCaptureHelper.stopScreenCaptureProtection();
+  }
+  // Cleanup system audio helper
+  if (process.platform === "win32") {
+    systemAudioHelper.cleanup();
   }
 });
 

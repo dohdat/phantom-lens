@@ -9,16 +9,18 @@
     "build:swift:check": "node -e \"if(process.platform === 'darwin') { require('child_process').execSync('npm run build:swift:universal', {stdio: 'inherit'}); } else { console.log('Skipping Swift build on non-macOS platform'); }\"",
     "build:native": "cd native && node-gyp rebuild",
     "build:native:clean": "cd native && node-gyp clean && node-gyp rebuild",
+    "build:phantom-audio": "cd native/phantom-audio && build.bat",
+    "build:phantom-audio:check": "node -e \"if(process.platform === 'win32') { require('child_process').execSync('npm run build:phantom-audio', {stdio: 'inherit'}); } else { console.log('Skipping phantom-audio build on non-Windows platform'); }\"",
     "dev": "cross-env NODE_ENV=development vite",
     "dev:prod": "cross-env NODE_ENV=production npm run clean && vite build && tsc -p tsconfig.electron.json && electron .",
     "build": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:check && vite build && tsc -p tsconfig.electron.json && electron-builder --mac --win --x64",
     "build:mac": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac",
-    "build:win": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --win",
+    "build:win": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:phantom-audio:check && vite build && tsc -p tsconfig.electron.json && electron-builder --win",
     "build:linux": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --linux",
     "dist": "npm run build",
     "publish": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:check && vite build && tsc -p tsconfig.electron.json && electron-builder --publish=always",
     "publish:mac": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:universal && vite build && tsc -p tsconfig.electron.json && electron-builder --mac --publish=always",
-    "publish:win": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --win --publish=always",
+    "publish:win": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:phantom-audio:check && vite build && tsc -p tsconfig.electron.json && electron-builder --win --publish=always",
     "publish:linux": "cross-env NODE_ENV=production rimraf dist dist-electron && vite build && tsc -p tsconfig.electron.json && electron-builder --linux --publish=always",
     "release": "npm run publish",
     "release:draft": "cross-env NODE_ENV=production rimraf dist dist-electron && npm run build:swift:check && vite build && tsc -p tsconfig.electron.json && electron-builder --publish=onTagOrDraft",
@@ -116,6 +118,16 @@
           "phantomlens"
         ]
       },
+      "extraResources": [
+        {
+          "from": "native/phantom-audio/build/bin/phantom-audio.exe",
+          "to": "phantom-audio.exe"
+        },
+        {
+          "from": "resources/models/whisper/ggml-small.en.q5_1.bin",
+          "to": "models/whisper/ggml-small.en.q5_1.bin"
+        }
+      ],
       "publish": {
         "provider": "github",
         "owner": "dohdat",

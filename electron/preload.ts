@@ -2,6 +2,12 @@ console.log("Preload script starting...");
 
 import { contextBridge, ipcRenderer } from "electron";
 
+// Types for system audio transcript messages
+interface TranscriptMessage {
+  type: "partial" | "final";
+  text: string;
+}
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: {
@@ -157,6 +163,28 @@ interface ElectronAPI {
     releaseDate?: string;
   }) => void) => () => void;
   onAutoUpdateError: (callback: (error: { message: string }) => void) => () => void;
+}
+
+// System Audio API interface (exposed separately)
+interface SystemAudioAPI {
+  start: () => Promise<{ success: boolean; error?: string }>;
+  stop: () => Promise<{ success: boolean; error?: string }>;
+  shutdown: () => Promise<{ success: boolean; error?: string }>;
+  getState: () => Promise<{
+    success: boolean;
+    data?: { isCapturing: boolean; isReady: boolean; lastError: string | null };
+    error?: string;
+  }>;
+  checkAvailability: () => Promise<{
+    success: boolean;
+    available: boolean;
+    error?: string;
+  }>;
+  onTranscript: (callback: (msg: TranscriptMessage) => void) => () => void;
+  onStarted: (callback: () => void) => () => void;
+  onStopped: (callback: () => void) => () => void;
+  onReady: (callback: () => void) => () => void;
+  onError: (callback: (error: { message: string }) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -428,6 +456,50 @@ const electronAPI = {
   resetAppOpenCount: () => ipcRenderer.invoke("reset-app-open-count"),
 } as ElectronAPI;
 
+// System Audio API - for Windows system audio capture and transcription
+const systemAudioAPI: SystemAudioAPI = {
+  start: () => ipcRenderer.invoke("system-audio:start"),
+  stop: () => ipcRenderer.invoke("system-audio:stop"),
+  shutdown: () => ipcRenderer.invoke("system-audio:shutdown"),
+  getState: () => ipcRenderer.invoke("system-audio:get-state"),
+  checkAvailability: () => ipcRenderer.invoke("system-audio:check-availability"),
+  onTranscript: (callback: (msg: TranscriptMessage) => void) => {
+    const subscription = (_event: any, msg: TranscriptMessage) => callback(msg);
+    ipcRenderer.on("system-audio:transcript", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:transcript", subscription);
+    };
+  },
+  onStarted: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on("system-audio:started", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:started", subscription);
+    };
+  },
+  onStopped: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on("system-audio:stopped", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:stopped", subscription);
+    };
+  },
+  onReady: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on("system-audio:ready", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:ready", subscription);
+    };
+  },
+  onError: (callback: (error: { message: string }) => void) => {
+    const subscription = (_event: any, error: { message: string }) => callback(error);
+    ipcRenderer.on("system-audio:error", subscription);
+    return () => {
+      ipcRenderer.removeListener("system-audio:error", subscription);
+    };
+  },
+};
+
 // Before exposing the API
 console.log(
   "About to expose electronAPI with methods:",
@@ -441,6 +513,9 @@ window.addEventListener("focus", () => {
 
 // Expose the API to the renderer process
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+
+// Expose System Audio API (Windows only)
+contextBridge.exposeInMainWorld("systemAudio", systemAudioAPI);
 
 // Expose platform info
 contextBridge.exposeInMainWorld("platform", process.platform);
