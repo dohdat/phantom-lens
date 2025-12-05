@@ -7,6 +7,8 @@
  * Keyboard shortcuts:
  * - Ctrl+D: Toggle debug panel
  * - Ctrl+Shift+C: Copy debug logs to clipboard
+ * - Ctrl+P: Toggle prompt editor
+ * - Ctrl+Shift+S: Send transcript to Gemini
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -46,9 +48,15 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
   
-  // Silence detection for auto-send
-  const silenceTimer = useRef<NodeJS.Timeout | null>(null);
-  const lastProcessedLength = useRef(0);
+  // Ref to access current transcript in keyboard handler
+  const transcriptRef = useRef("");
+  const currentPartialRef = useRef("");
+  const audioPromptRef = useRef(DEFAULT_AUDIO_PROMPT);
+
+  // Keep refs in sync
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { currentPartialRef.current = currentPartial; }, [currentPartial]);
+  useEffect(() => { audioPromptRef.current = audioPrompt; }, [audioPrompt]);
 
   // Debug logger
   const addLog = useCallback((msg: string) => {
@@ -66,11 +74,44 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     });
   }, [debugLogs, addLog]);
 
-  // Keyboard shortcuts for debug panel
+  // Send transcript to Gemini manually
+  const sendTranscriptToGemini = useCallback(async () => {
+    const fullText = transcriptRef.current + (currentPartialRef.current ? " " + currentPartialRef.current : "");
+    
+    if (fullText.length < 10) {
+      addLog("Not enough transcript to send (min 10 chars)");
+      return;
+    }
+
+    addLog(`Sending ${fullText.length} chars to Gemini (manual)...`);
+    setIsProcessing(true);
+
+    try {
+      const finalPrompt = audioPromptRef.current.replace('{{TRANSCRIPT}}', fullText);
+
+      addLog("Calling processAudioTranscript (no screenshots)...");
+      const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
+      addLog(`processAudioTranscript: ${JSON.stringify(result)}`);
+      
+      if (!result?.success) {
+        addLog("Fallback: Using setUserPrompt + triggerProcessScreenshots...");
+        await (window as any).electronAPI?.setUserPrompt(finalPrompt);
+        await (window as any).electronAPI?.triggerProcessScreenshots();
+      }
+      
+      addLog("Done sending to Gemini!");
+    } catch (err: any) {
+      addLog(`FAILED: ${err?.message || err}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [addLog]);
+
+  // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       // Ctrl+D: Toggle debug panel
-      if (e.ctrlKey && e.key === 'd') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'd') {
         e.preventDefault();
         setShowDebug(prev => !prev);
       }
@@ -80,15 +121,20 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         copyDebugLogs();
       }
       // Ctrl+P: Toggle prompt editor
-      if (e.ctrlKey && e.key === 'p') {
+      if (e.ctrlKey && !e.shiftKey && e.key === 'p') {
         e.preventDefault();
         setShowPromptEditor(prev => !prev);
+      }
+      // Ctrl+Shift+S: Send transcript to Gemini
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        await sendTranscriptToGemini();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [copyDebugLogs]);
+  }, [copyDebugLogs, sendTranscriptToGemini]);
 
   // Listen for toggle events from keyboard shortcut
   useEffect(() => {
@@ -109,7 +155,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         addLog("Starting - reset transcript");
         setTranscript("");
         setCurrentPartial("");
-        lastProcessedLength.current = 0;
       }
     };
 
@@ -170,54 +215,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       cleanupTranscript?.();
     };
   }, []);
-
-  // Silence detection - send to Gemini after 2 seconds of no new transcript
-  useEffect(() => {
-    const fullText = transcript + (currentPartial ? " " + currentPartial : "");
-    
-    if (isCapturing && fullText.length > lastProcessedLength.current && fullText.length >= 30) {
-      if (silenceTimer.current) {
-        clearTimeout(silenceTimer.current);
-      }
-
-      silenceTimer.current = setTimeout(async () => {
-        const newContent = fullText.slice(lastProcessedLength.current).trim();
-        if (newContent.length >= 30) {
-          addLog(`Silence detected! Sending ${fullText.length} chars to Gemini (audio-only)...`);
-          setIsProcessing(true);
-          lastProcessedLength.current = fullText.length;
-
-          try {
-            // Use the custom audio prompt with transcript placeholder replaced
-            const finalPrompt = audioPrompt.replace('{{TRANSCRIPT}}', fullText);
-
-            addLog("Calling processAudioTranscript (no screenshots)...");
-            const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
-            addLog(`processAudioTranscript: ${JSON.stringify(result)}`);
-            
-            if (!result?.success) {
-              // Fallback to old method if new API not available
-              addLog("Fallback: Using setUserPrompt + triggerProcessScreenshots...");
-              await (window as any).electronAPI?.setUserPrompt(finalPrompt);
-              await (window as any).electronAPI?.triggerProcessScreenshots();
-            }
-            
-            addLog("Done sending to Gemini!");
-          } catch (err: any) {
-            addLog(`FAILED: ${err?.message || err}`);
-          } finally {
-            setIsProcessing(false);
-          }
-        }
-      }, 2000);
-    }
-
-    return () => {
-      if (silenceTimer.current) {
-        clearTimeout(silenceTimer.current);
-      }
-    };
-  }, [transcript, currentPartial, isCapturing, audioPrompt]);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
 
@@ -314,11 +311,23 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
           {/* Control buttons */}
           <div className="flex gap-1">
             <button 
+              onClick={sendTranscriptToGemini}
+              disabled={isProcessing || fullText.length < 10}
+              className={`px-2 py-1 rounded text-[10px] ${
+                fullText.length >= 10 && !isProcessing 
+                  ? 'bg-purple-600/90 text-white hover:bg-purple-500' 
+                  : 'bg-gray-800/90 text-white/40 cursor-not-allowed'
+              }`}
+              title="Ctrl+Shift+S - Send to Gemini"
+            >
+              🚀
+            </button>
+            <button 
               onClick={() => setShowDebug(!showDebug)}
               className={`px-2 py-1 rounded text-[10px] ${showDebug ? 'bg-green-700/90 text-white' : 'bg-gray-800/90 text-white/70'} hover:bg-gray-700`}
               title="Ctrl+D"
             >
-              {showDebug ? "🐛" : "🐛"}
+              🐛
             </button>
             <button 
               onClick={() => setShowPromptEditor(!showPromptEditor)}
@@ -333,7 +342,10 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         {/* Live transcript */}
         {isCapturing && fullText && (
           <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
-            <div className="text-white/50 text-[10px] mb-1">Live Transcript ({fullText.length} chars):</div>
+            <div className="flex justify-between text-white/50 text-[10px] mb-1">
+              <span>Live Transcript ({fullText.length} chars)</span>
+              <span className="text-purple-400">Ctrl+Shift+S to send</span>
+            </div>
             <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
           </div>
         )}
