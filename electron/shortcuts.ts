@@ -208,7 +208,7 @@ export class ShortcutsHelper {
   public registerGlobalShortcuts(): void {
     // Toggle window shortcut - this one should always work
     // The backslash key needs to be properly escaped
-    const toggleHandler = () => {
+    const toggleHandler = async () => {
       console.log("[Shortcuts] Toggle shortcut (Ctrl/Cmd + \\) triggered");
       const wasVisible = this.deps.isWindowUsable();
       console.log(`[Shortcuts] Window was visible: ${wasVisible}`);
@@ -218,6 +218,16 @@ export class ShortcutsHelper {
       if (wasVisible) {
         console.log("[Shortcuts] Window hidden, unregistering app shortcuts");
         this.unregisterAppShortcuts();
+        
+        // Shutdown phantom-audio to free memory when window is hidden
+        if (process.platform === "win32") {
+          console.log("[Shortcuts] Shutting down phantom-audio to free memory");
+          try {
+            await systemAudioHelper.shutdown();
+          } catch (error) {
+            console.error("[Shortcuts] Error shutting down phantom-audio:", error);
+          }
+        }
       } else {
         // If the window was hidden and is now being shown, register the shortcuts
         console.log("[Shortcuts] Window shown, registering app shortcuts");
