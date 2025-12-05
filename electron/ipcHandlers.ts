@@ -402,6 +402,28 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "process-audio-transcript"));
 
+  // ===================== Audio + Screenshot Processing IPC =====================
+  ipcMain.handle("process-audio-with-screenshot", createSafeIpcHandler(async (_, prompt: string) => {
+    if (!deps.processingHelper) {
+      return { success: false, error: "Processing helper not available" };
+    }
+
+    try {
+      // Take a screenshot first
+      await deps.takeScreenshot();
+      // Process with audio prompt + screenshot
+      await deps.processingHelper.processAudioWithScreenshot(prompt);
+      console.log("Audio + screenshot processing initiated successfully");
+      return { success: true, data: "Audio + screenshot processing started" };
+    } catch (error: any) {
+      console.error("Error processing audio with screenshot:", error);
+      return { 
+        success: false, 
+        error: `Audio + screenshot processing failed: ${error.message}` 
+      };
+    }
+  }, "process-audio-with-screenshot"));
+
   // ===================== Follow-up Processing IPC =====================
   ipcMain.handle("process-follow-up", createSafeIpcHandler(async () => {
     try {

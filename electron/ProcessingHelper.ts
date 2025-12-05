@@ -369,6 +369,86 @@ export class ProcessingHelper {
   }
 
   /**
+   * Process audio transcript WITH screenshot - uses audio prompt (not system prompt)
+   * This sends the audio prompt along with a screenshot to Gemini
+   */
+  public async processAudioWithScreenshot(prompt: string): Promise<void> {
+    if (this.isCurrentlyProcessing) {
+      console.log("Processing already in progress. Skipping audio+screenshot call.");
+      return;
+    }
+
+    this.isCurrentlyProcessing = true;
+    const mainWindow = this.deps.getMainWindow();
+    if (!mainWindow) {
+      this.isCurrentlyProcessing = false;
+      return;
+    }
+
+    try {
+      // PERFORMANCE: Set properties before processing starts
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setSkipTaskbar(true);
+        mainWindow.setFocusable(false);
+        mainWindow.setIgnoreMouseEvents(true);
+        if (mainWindow.isFocused()) {
+          mainWindow.blur();
+        }
+      }
+
+      mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START);
+
+      // Create abort controller
+      const abortController = this.createAbortController('main');
+      const { signal } = abortController;
+
+      try {
+        const result = await this.processAudioWithScreenshotHelper(prompt, signal);
+
+        if (!result.success) {
+          const errorMessage = result.error || "Failed to generate response. Please try again.";
+          console.log("Audio+screenshot processing failed:", errorMessage);
+          
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            errorMessage
+          );
+          this.deps.setView("initial");
+          return;
+        }
+
+        // Success - set view to response
+        console.log("Setting view to response after successful audio+screenshot processing");
+        try {
+          const main = require("./main");
+          main.saveResponseToHistory?.(result.data);
+        } catch {}
+        mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: result.data });
+        this.deps.setView("response");
+      } catch (error: any) {
+        console.error("Audio+screenshot processing error:", error);
+
+        if (error.message === "Request aborted" || error.name === "AbortError") {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Processing was canceled by the user."
+          );
+        } else {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            error.message || "Server error. Please try again."
+          );
+        }
+        this.deps.setView("initial");
+      } finally {
+        this.currentProcessingAbortController = null;
+      }
+    } finally {
+      this.isCurrentlyProcessing = false;
+      this.clearProcessingTimeouts();
+    }
+  }
+  /**
    * Helper to process audio transcript with Gemini - text only, no images
    */
   private async processAudioTranscriptHelper(
@@ -465,6 +545,142 @@ export class ProcessingHelper {
         mainWindow.webContents.send(
           this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
           error.message || "Server error during audio response generation."
+        );
+      }
+      this.deps.setView("initial");
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  }
+
+  /**
+   * Helper to process audio transcript with screenshot - uses audio prompt directly
+   */
+  private async processAudioWithScreenshotHelper(
+    prompt: string,
+    signal: AbortSignal
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    let responseText = "";
+    let chunksSent = false;
+    let accumulatedText = "";
+
+    try {
+      const apiKey = process.env.API_KEY;
+      const model = await this.deps.getConfiguredModel();
+
+      if (!apiKey) {
+        throw new Error("API key not found. Please configure it in settings.");
+      }
+
+      // Take a screenshot
+      const screenshotQueue = this.screenshotHelper.getScreenshotQueue();
+      if (screenshotQueue.length === 0) {
+        // No screenshots in queue, take one now
+        console.log("[AudioWithScreenshot] No screenshots in queue, proceeding without image");
+      }
+
+      const screenshots = await Promise.all(
+        screenshotQueue.map(async (path) => ({
+          path,
+          data: fs.readFileSync(path).toString("base64"),
+        }))
+      );
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
+      const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
+
+      const mainWindow = this.deps.getMainWindow();
+
+      if (signal.aborted) throw new Error("Request aborted");
+
+      const abortHandler = () => {};
+      signal.addEventListener("abort", abortHandler);
+
+      try {
+        // Build content parts - audio prompt + images
+        const contentParts: any[] = [prompt];
+        
+        // Add images if available
+        if (screenshots.length > 0) {
+          const imageParts = screenshots.map((screenshot) => ({
+            inlineData: {
+              mimeType: "image/png",
+              data: screenshot.data,
+            },
+          }));
+          contentParts.push(...imageParts);
+          console.log(`[AudioWithScreenshot] Added ${imageParts.length} screenshots to request`);
+        }
+
+        // Stream the response - uses audio prompt directly with images
+        const result = await geminiModel.generateContentStream(contentParts);
+
+        accumulatedText = "";
+        for await (const chunk of result.stream) {
+          if (signal.aborted) {
+            throw new Error("Request aborted");
+          }
+
+          const chunkText = chunk.text();
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            chunksSent = true;
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        responseText = accumulatedText;
+
+        // Clear screenshot queue after successful processing
+        this.screenshotHelper.clearExtraScreenshotQueue();
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            const main = require("./main");
+            main.saveResponseToHistory?.(responseText);
+          } catch {}
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+        }
+
+        return { success: true, data: responseText };
+      } finally {
+        try {
+          signal.removeEventListener("abort", abortHandler);
+        } catch (e) {}
+      }
+    } catch (error: any) {
+      const mainWindow = this.deps.getMainWindow();
+      console.error("Audio+screenshot response generation error:", {
+        message: error.message,
+        chunksSent,
+      });
+
+      if (chunksSent) {
+        console.log("Chunks were already sent - allowing partial response");
+        if (mainWindow && !mainWindow.isDestroyed() && accumulatedText) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: accumulatedText });
+        }
+        return { success: true, data: accumulatedText || "" };
+      }
+
+      if (error.message === "Request aborted" || error.name === "AbortError") {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Audio+screenshot response generation canceled."
+          );
+        }
+        return { success: false, error: "Response generation canceled." };
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          error.message || "Server error during audio+screenshot response generation."
         );
       }
       this.deps.setView("initial");

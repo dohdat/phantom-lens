@@ -70,6 +70,8 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [transcript, setTranscript] = useState("");
   const [currentPartial, setCurrentPartial] = useState("");
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
+  // Track which mode is being used for display
+  const [captureMode, setCaptureMode] = useState<"audio-only" | "audio-screenshot">("audio-only");
   
   // Ref to access current transcript in keyboard handler
   const transcriptRef = useRef("");
@@ -124,10 +126,16 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             const finalPrompt = capturedPrompt.replace('{{TRANSCRIPT}}', fullText);
             
             if (capturedMode === "audio-screenshot") {
-              // Audio + Screenshot mode: set prompt and trigger screenshot processing
-              console.log("[MeetingAssistant] Sending audio + screenshot");
-              await (window as any).electronAPI?.setUserPrompt(finalPrompt);
-              await (window as any).electronAPI?.triggerProcessScreenshots();
+              // Audio + Screenshot mode: use audio prompt with screenshot
+              console.log("[MeetingAssistant] Sending audio + screenshot (using audio prompt)");
+              const result = await (window as any).electronAPI?.processAudioWithScreenshot?.(finalPrompt);
+              
+              // Fallback if processing fails
+              if (!result?.success) {
+                console.log("[MeetingAssistant] Fallback: using setUserPrompt + triggerProcessScreenshots");
+                await (window as any).electronAPI?.setUserPrompt(finalPrompt);
+                await (window as any).electronAPI?.triggerProcessScreenshots();
+              }
             } else {
               // Audio only mode: process transcript without screenshot
               console.log("[MeetingAssistant] Sending audio only");
@@ -153,7 +161,9 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       
       if (data.isCapturing) {
         // Store the mode used to start this recording
-        captureModeRef.current = data.mode || "audio-only";
+        const mode = data.mode || "audio-only";
+        captureModeRef.current = mode;
+        setCaptureMode(mode);
         
         try {
           const response = await (window as any).electronAPI?.getAudioPrompt?.();
@@ -277,7 +287,9 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
               {error
                 ? "Recording Error"
-                : "Recording Meeting"}
+                : captureMode === "audio-screenshot" 
+                  ? "Audio + Screenshot" 
+                  : "Audio Only"}
             </span>
           </div>
 
@@ -330,7 +342,9 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             <div>
               <div className="text-white/50 text-[10px] mb-2 flex justify-between">
                 <span>{fullText.length} chars</span>
-                <span className="text-purple-400">Ctrl+Shift+A to send</span>
+                <span className="text-purple-400">
+                  {captureMode === "audio-screenshot" ? "Ctrl+Shift+S" : "Ctrl+Shift+A"} to send
+                </span>
               </div>
               <div className="text-white/90 text-xs leading-relaxed">
                 {currentPartial ? (

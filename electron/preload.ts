@@ -43,6 +43,7 @@ interface ElectronAPI {
   triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>;
   processFollowUp: () => Promise<{ success: boolean; error?: string }>;
   processAudioTranscript: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+  processAudioWithScreenshot: (prompt: string) => Promise<{ success: boolean; error?: string }>;
   // movement
   triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>;
   triggerMoveRight: () => Promise<{ success: boolean; error?: string }>;
@@ -331,6 +332,7 @@ const electronAPI = {
   triggerProcessScreenshots: () => ipcRenderer.invoke("trigger-process-screenshots"),
   processFollowUp: () => ipcRenderer.invoke("process-follow-up"),
   processAudioTranscript: (prompt: string) => ipcRenderer.invoke("process-audio-transcript", prompt),
+  processAudioWithScreenshot: (prompt: string) => ipcRenderer.invoke("process-audio-with-screenshot", prompt),
   triggerMoveLeft: () => ipcRenderer.invoke("trigger-move-left"),
   triggerMoveRight: () => ipcRenderer.invoke("trigger-move-right"),
   triggerMoveUp: () => ipcRenderer.invoke("trigger-move-up"),
