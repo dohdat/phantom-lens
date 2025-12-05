@@ -67,8 +67,15 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     loadAudioPrompt();
   }, []);
 
-  // Send transcript to Gemini
-  const sendTranscriptToGemini = useCallback(async () => {
+  // Stop recording and send transcript to Gemini
+  const stopAndSendTranscript = useCallback(async () => {
+    // First, stop the recording if it's still active
+    try {
+      await (window as any).systemAudio?.stop?.();
+    } catch (err) {
+      console.error('Failed to stop recording:', err);
+    }
+    
     const fullText = transcriptRef.current + (currentPartialRef.current ? " " + currentPartialRef.current : "");
     
     if (fullText.length < 10) {
@@ -98,7 +105,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     const handleToggle = async (data: { isCapturing: boolean }) => {
       // If stopping and we were capturing, send the transcript
       if (!data.isCapturing && wasCapturingRef.current) {
-        await sendTranscriptToGemini();
+        await stopAndSendTranscript();
       }
       
       wasCapturingRef.current = data.isCapturing;
@@ -164,7 +171,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       cleanupError?.();
       cleanupTranscript?.();
     };
-  }, [sendTranscriptToGemini]);
+  }, [stopAndSendTranscript]);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
 

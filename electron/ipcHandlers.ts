@@ -969,6 +969,28 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "get-audio-prompt"));
 
+  ipcMain.handle("get-default-audio-prompt", createSafeIpcHandler(async () => {
+    try {
+      const defaultPrompt = `You are an AI assistant helping a senior software engineer during a technical meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions that a senior engineer would ask.
+
+Guidelines:
+- Focus on architecture decisions, trade-offs, and scalability
+- Ask about edge cases, error handling, and security implications
+- Clarify requirements, dependencies, and technical constraints
+- Questions should demonstrate deep technical understanding
+- Keep questions concise and professional
+
+Conversation transcript:
+"{{TRANSCRIPT}}"
+
+Suggest questions:`;
+      return { success: true, data: { prompt: defaultPrompt } };
+    } catch (error: any) {
+      console.error("Error getting default audio prompt:", error);
+      return { success: false, error: "Failed to get default audio prompt" };
+    }
+  }, "get-default-audio-prompt"));
+
   ipcMain.handle("set-audio-prompt", createSafeIpcHandler(async (
     _event: any,
     prompt: string

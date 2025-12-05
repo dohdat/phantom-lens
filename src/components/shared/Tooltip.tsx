@@ -178,6 +178,12 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         const audioPromptResponse = await window.electronAPI.getAudioPrompt?.();
         if (audioPromptResponse?.success && audioPromptResponse.data?.prompt) {
           setAudioPrompt(audioPromptResponse.data.prompt);
+        } else {
+          // No custom audio prompt set, load the default prompt for display
+          const defaultAudioPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.();
+          if (defaultAudioPromptResponse?.success && defaultAudioPromptResponse.data?.prompt) {
+            setAudioPrompt(defaultAudioPromptResponse.data.prompt);
+          }
         }
       } catch (e) {
         console.warn("Failed to load audio prompt:", e);
@@ -1098,16 +1104,23 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       Save Audio Prompt
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!isInteractive) return;
-                        setAudioPrompt("");
+                        try {
+                          const defaultPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.();
+                          if (defaultPromptResponse?.success && defaultPromptResponse.data?.prompt) {
+                            setAudioPrompt(defaultPromptResponse.data.prompt);
+                          }
+                        } catch (e) {
+                          console.error("Failed to load default audio prompt:", e);
+                        }
                       }}
                       disabled={!isInteractive}
                       tabIndex={isInteractive ? 0 : -1}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
                       style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
                     >
-                      Clear
+                      Reset to Default
                     </button>
                   </div>
                   <p className="text-[10px] text-white/50 leading-relaxed">
