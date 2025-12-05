@@ -973,19 +973,21 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     try {
       const defaultPrompt = `You are a senior software engineer participating in a technical meeting. Based on the conversation transcript below:
 
-      1. **Summary**: Provide a concise summary of the key points discussed
+Summary: Provide a concise summary in clear key points that capture the main topics discussed.
 
-      2. **Clarifying Questions**: Ask smart, clarifying questions that demonstrate deep technical understanding:
-        - Focus on architecture decisions, trade-offs, and scalability
-        - Ask about edge cases, error handling, and security implications
-        - Clarify requirements, dependencies, and technical constraints
+Clarifying Questions: Ask a set of simple English questions that show strong technical understanding. Focus on:
+- Architecture decisions and tradeoffs
+- Scalability concerns
+- Edge cases and error handling
+- Security considerations
+- Requirements, dependencies, and constraints
 
-      Keep your response concise and professional.
+Keep your response concise and professional.
 
-      Conversation transcript:
-      "{{TRANSCRIPT}}"
+Conversation transcript:
+"{{TRANSCRIPT}}"
 
-      Your response:`;
+Your response:`;
       return { success: true, data: { prompt: defaultPrompt } };
     } catch (error: any) {
       console.error("Error getting default audio prompt:", error);

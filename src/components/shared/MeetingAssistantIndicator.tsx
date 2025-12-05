@@ -2,12 +2,37 @@
  * MeetingAssistantIndicator - A minimal indicator showing meeting assistant status
  * 
  * Shows when audio capture is active, live transcript, and processing status.
+ * Styled to match the Response page design.
  * 
  * Keyboard shortcuts:
  * - Ctrl+Shift+A: Toggle recording (sends transcript when stopping)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import phantomlensLogo from "../../../assets/icons/phantomlens_logo.svg";
+
+// Hook to track transparency mode
+function useTransparencyMode() {
+  const [isTransparent, setIsTransparent] = useState(false);
+
+  useEffect(() => {
+    const checkTransparency = () => {
+      setIsTransparent(document.body.classList.contains('transparent-mode'));
+    };
+
+    checkTransparency();
+
+    const observer = new MutationObserver(checkTransparency);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return isTransparent;
+}
 
 interface MeetingAssistantIndicatorProps {
   className?: string;
@@ -20,12 +45,14 @@ interface TranscriptMessage {
 
 const DEFAULT_AUDIO_PROMPT = `You are a senior software engineer participating in a technical meeting. Based on the conversation transcript below:
 
-1. **Summary**: Provide a concise summary of the key points discussed
+Summary: Provide a concise summary in clear key points that capture the main topics discussed.
 
-2. **Clarifying Questions**: Ask smart, clarifying questions that demonstrate deep technical understanding:
-   - Focus on architecture decisions, trade-offs, and scalability
-   - Ask about edge cases, error handling, and security implications
-   - Clarify requirements, dependencies, and technical constraints
+Clarifying Questions: Ask a set of simple English questions that show strong technical understanding. Focus on:
+- Architecture decisions and tradeoffs
+- Scalability concerns
+- Edge cases and error handling
+- Security considerations
+- Requirements, dependencies, and constraints
 
 Keep your response concise and professional.
 
@@ -176,65 +203,180 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   }, [stopAndSendTranscript]);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
+  const isTransparent = useTransparencyMode();
+
+  // Don't render anything if not capturing and no notification
+  const shouldShow = isCapturing || isProcessing || (showNotification && (error || !isCapturing));
+
+  if (!shouldShow) {
+    return null;
+  }
 
   return (
-    <>
-      {/* Main status area - positioned on the RIGHT */}
+    <div 
+      className={`fixed top-16 flex flex-col gap-2 z-50 ${className}`}
+      style={{ 
+        right: 'calc(0.5rem + 470px)',
+        width: '320px'
+      }}
+    >
+      {/* Main card container - matches Response page style */}
       <div 
-        className={`fixed top-2 flex flex-col gap-2 z-50 max-w-md ${className}`}
-        style={{ right: 'calc(0.5rem + 470px)' }}
+        className="flex flex-col w-full rounded-3xl overflow-hidden"
+        style={{
+          background: isTransparent
+            ? 'transparent'
+            : 'rgba(10, 10, 12, 0.78)',
+          backdropFilter: isTransparent
+            ? 'none'
+            : 'blur(10px)',
+          borderRadius: '24px',
+          border: isTransparent
+            ? 'none'
+            : '1px solid rgba(255, 255, 255, 0.14)',
+        }}
       >
-        {/* Status bar */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Error indicator */}
-          {error && (
-            <div className="flex items-center gap-1.5 bg-red-600/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-              <span>⚠️ {error}</span>
+        {/* Header - matches Response page header */}
+        <div className="flex justify-between items-center px-4 py-3 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">
+              <img
+                src={phantomlensLogo}
+                alt="PhantomLens"
+                className="w-6 h-6"
+                style={{
+                  opacity: isTransparent ? 0.4 : 1,
+                  transition: 'opacity 0.3s ease'
+                }}
+              />
             </div>
-          )}
-          
-          {/* Recording indicator */}
-          {isCapturing && !error && (
-            <div className="flex items-center gap-1.5 bg-red-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+            <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
+              {error
+                ? "Recording Error"
+                : isProcessing
+                ? "Sending to Gemini..."
+                : isCapturing
+                ? "Recording Meeting"
+                : "Recording Stopped"}
+            </span>
+          </div>
+
+          {/* Status Badge - like Initial/Follow-up */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {error ? (
+              <span 
+                className="text-xs font-medium px-2 py-1 rounded-full"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: 'rgba(252, 165, 165, 0.9)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                Error
               </span>
-              <span>🎤 Recording</span>
-            </div>
-          )}
+            ) : isProcessing ? (
+              <span 
+                className="text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1.5"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.2)',
+                  color: 'rgba(147, 197, 253, 0.9)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)'
+                }}
+              >
+                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Processing
+              </span>
+            ) : isCapturing ? (
+              <span 
+                className="text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1.5"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  color: 'rgba(252, 165, 165, 0.9)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
+                </span>
+                Live
+              </span>
+            ) : (
+              <span 
+                className="text-xs font-medium px-2 py-1 rounded-full"
+                style={{
+                  background: 'rgba(107, 114, 128, 0.2)',
+                  color: 'rgba(209, 213, 219, 0.9)',
+                  border: '1px solid rgba(107, 114, 128, 0.3)'
+                }}
+              >
+                Stopped
+              </span>
+            )}
+          </div>
+        </div>
 
-          {/* Processing indicator */}
-          {isProcessing && (
-            <div className="flex items-center gap-1.5 bg-blue-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              <span>Asking Gemini...</span>
+        {/* Content area - matches Response page content area */}
+        <div 
+          className="overflow-y-auto text-sm leading-relaxed max-h-32 select-text"
+          style={{ 
+            background: 'transparent',
+            padding: '0 16px 16px 48px',
+            color: 'white'
+          }}
+        >
+          {error ? (
+            <div className="text-red-300/80 text-xs">
+              {error}
             </div>
-          )}
-
-          {/* Stopped notification */}
-          {!isCapturing && !error && showNotification && (
-            <div className="flex items-center gap-1.5 bg-gray-700/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-              <span>🎤 Stopped</span>
+          ) : isCapturing && fullText ? (
+            <div>
+              <div className="text-white/50 text-[10px] mb-2 flex justify-between">
+                <span>{fullText.length} characters</span>
+                <span className="text-purple-400">Ctrl+Shift+A to stop & send</span>
+              </div>
+              <div className="text-white/90 text-xs leading-relaxed">
+                {transcript}
+                <span className="text-yellow-300/80">{currentPartial}</span>
+              </div>
+            </div>
+          ) : isCapturing ? (
+            <div className="flex items-center gap-1.5 py-2">
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" 
+                   style={{ 
+                     background: 'rgba(255, 255, 255, 0.6)',
+                     animationDelay: '0s',
+                     animationDuration: '1.5s'
+                   }}></div>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" 
+                   style={{ 
+                     background: 'rgba(255, 255, 255, 0.6)',
+                     animationDelay: '0.2s',
+                     animationDuration: '1.5s'
+                   }}></div>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" 
+                   style={{ 
+                     background: 'rgba(255, 255, 255, 0.6)',
+                     animationDelay: '0.4s',
+                     animationDuration: '1.5s'
+                   }}></div>
+              <span className="text-white/50 text-xs ml-2">Listening...</span>
+            </div>
+          ) : isProcessing ? (
+            <div className="text-white/60 text-xs">
+              Sending transcript to Gemini for analysis...
+            </div>
+          ) : (
+            <div className="text-white/50 text-xs">
+              Recording stopped. Transcript sent for processing.
             </div>
           )}
         </div>
-
-        {/* Live transcript */}
-        {isCapturing && fullText && (
-          <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
-            <div className="flex justify-between text-white/50 text-[10px] mb-1">
-              <span>Live Transcript ({fullText.length} chars)</span>
-              <span className="text-purple-400">Stop recording to send</span>
-            </div>
-            <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
-          </div>
-        )}
       </div>
-    </>
+    </div>
   );
 }
 
