@@ -5,7 +5,9 @@
  * Styled to match the Response page design.
  * 
  * Keyboard shortcuts:
- * - Ctrl+Shift+A: Toggle recording (sends transcript when stopping)
+ * - Ctrl+Shift+A: Toggle recording (sends audio transcript only when stopping)
+ * - Ctrl+Shift+S: Toggle recording (sends audio transcript + screenshot when stopping)
+ * - Ctrl+Enter: Screenshot only (no audio)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -74,6 +76,8 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const currentPartialRef = useRef("");
   const audioPromptRef = useRef(DEFAULT_AUDIO_PROMPT);
   const wasCapturingRef = useRef(false);
+  // Track which mode was used to start recording: "audio-only" or "audio-screenshot"
+  const captureModeRef = useRef<"audio-only" | "audio-screenshot">("audio-only");
 
   // Keep refs in sync
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
@@ -95,15 +99,16 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     loadAudioPrompt();
   }, []);
 
-  // Listen for toggle events from keyboard shortcut (Ctrl+Shift+A)
+  // Listen for toggle events from keyboard shortcuts (Ctrl+Shift+A or Ctrl+Shift+S)
   useEffect(() => {
-    const handleToggle = async (data: { isCapturing: boolean }) => {
-      // If stopping and we were capturing, send the transcript
+    const handleToggle = async (data: { isCapturing: boolean; mode?: "audio-only" | "audio-screenshot" }) => {
+      // If stopping and we were capturing, send based on the mode used to start
       if (!data.isCapturing && wasCapturingRef.current) {
-        // Capture transcript values BEFORE clearing state
+        // Capture transcript values and mode BEFORE clearing state
         const capturedTranscript = transcriptRef.current;
         const capturedPartial = currentPartialRef.current;
         const capturedPrompt = audioPromptRef.current;
+        const capturedMode = captureModeRef.current;
         
         // Hide indicator immediately
         setIsCapturing(false);
@@ -118,21 +123,38 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
           try {
             const finalPrompt = capturedPrompt.replace('{{TRANSCRIPT}}', fullText);
             
-            const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
-            
-            if (!result?.success) {
+            if (capturedMode === "audio-screenshot") {
+              // Audio + Screenshot mode: set prompt and trigger screenshot processing
+              console.log("[MeetingAssistant] Sending audio + screenshot");
               await (window as any).electronAPI?.setUserPrompt(finalPrompt);
               await (window as any).electronAPI?.triggerProcessScreenshots();
+            } else {
+              // Audio only mode: process transcript without screenshot
+              console.log("[MeetingAssistant] Sending audio only");
+              const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
+              
+              // Fallback to screenshot if audio-only processing fails
+              if (!result?.success) {
+                await (window as any).electronAPI?.setUserPrompt(finalPrompt);
+                await (window as any).electronAPI?.triggerProcessScreenshots();
+              }
             }
           } catch (err: any) {
             console.error('Failed to send transcript:', err);
           }
+        } else if (capturedMode === "audio-screenshot") {
+          // No meaningful transcript but in screenshot mode - just send screenshot
+          console.log("[MeetingAssistant] No transcript, sending screenshot only");
+          await (window as any).electronAPI?.triggerProcessScreenshots();
         }
       }
       
       wasCapturingRef.current = data.isCapturing;
       
       if (data.isCapturing) {
+        // Store the mode used to start this recording
+        captureModeRef.current = data.mode || "audio-only";
+        
         try {
           const response = await (window as any).electronAPI?.getAudioPrompt?.();
           if (response?.success && response.data?.prompt) {

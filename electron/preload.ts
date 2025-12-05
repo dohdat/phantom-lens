@@ -202,7 +202,7 @@ interface SystemAudioAPI {
   onStopped: (callback: () => void) => () => void;
   onReady: (callback: () => void) => () => void;
   onError: (callback: (error: { message: string }) => void) => () => void;
-  onToggled: (callback: (data: { isCapturing: boolean }) => void) => () => void;
+  onToggled: (callback: (data: { isCapturing: boolean; mode?: "audio-only" | "audio-screenshot" }) => void) => () => void;
 }
 
 export const PROCESSING_EVENTS = {
@@ -522,8 +522,8 @@ const systemAudioAPI: SystemAudioAPI = {
       ipcRenderer.removeListener("system-audio:error", subscription);
     };
   },
-  onToggled: (callback: (data: { isCapturing: boolean }) => void) => {
-    const subscription = (_event: any, data: { isCapturing: boolean }) => callback(data);
+  onToggled: (callback: (data: { isCapturing: boolean; mode?: "audio-only" | "audio-screenshot" }) => void) => {
+    const subscription = (_event: any, data: { isCapturing: boolean; mode?: "audio-only" | "audio-screenshot" }) => callback(data);
     ipcRenderer.on("system-audio:toggled", subscription);
     return () => {
       ipcRenderer.removeListener("system-audio:toggled", subscription);

@@ -148,16 +148,40 @@ export class ShortcutsHelper {
           mainWindow.webContents.send("toggle-transparency");
         }
       },
-      // Toggle system audio capture - Ctrl/Cmd + Shift + A
+      // Toggle system audio capture (audio only) - Ctrl/Cmd + Shift + A
       "CommandOrControl+Shift+A": async () => {
-        console.log("Command/Ctrl + Shift + A pressed. Toggling system audio capture...");
+        console.log("Command/Ctrl + Shift + A pressed. Toggling system audio capture (audio only mode)...");
         if (process.platform === "win32") {
           try {
             const isCapturing = await systemAudioHelper.toggle();
-            console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"}`);
+            console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"} (audio only mode)`);
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send("system-audio:toggled", { isCapturing });
+              mainWindow.webContents.send("system-audio:toggled", { isCapturing, mode: "audio-only" });
+            }
+          } catch (error: any) {
+            console.error("[SystemAudio] Toggle failed:", error);
+            const mainWindow = this.deps.getMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("system-audio:error", { 
+                message: error?.message || String(error) 
+              });
+            }
+          }
+        } else {
+          console.log("[SystemAudio] System audio capture only available on Windows");
+        }
+      },
+      // Toggle system audio capture (audio + screenshot) - Ctrl/Cmd + Shift + S
+      "CommandOrControl+Shift+S": async () => {
+        console.log("Command/Ctrl + Shift + S pressed. Toggling system audio capture (audio + screenshot mode)...");
+        if (process.platform === "win32") {
+          try {
+            const isCapturing = await systemAudioHelper.toggle();
+            console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"} (audio + screenshot mode)`);
+            const mainWindow = this.deps.getMainWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("system-audio:toggled", { isCapturing, mode: "audio-screenshot" });
             }
           } catch (error: any) {
             console.error("[SystemAudio] Toggle failed:", error);
