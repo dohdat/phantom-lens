@@ -96,10 +96,10 @@ export class ShortcutsHelper {
         }
       },
       
-      // QUIT APPLICATION
+      // HIDE WINDOW (not quit) - same as Ctrl+\
       "CommandOrControl+Q": () => {
-        console.log("Command/Ctrl + Q pressed. Quitting application...");
-        this.deps.quitApplication();
+        console.log("Command/Ctrl + Q pressed. Hiding window...");
+        this.deps.toggleMainWindow();
       },
       // Scroll response content - Alt + Up/Down
       "Alt+Up": () => {

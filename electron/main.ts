@@ -1422,7 +1422,32 @@ async function getSystemPrompt(): Promise<string | null> {
 // ============================================================================
 // APP LIFECYCLE
 // ============================================================================
-app.whenReady().then(initializeApp);
+
+// Ensure only one instance of the app is running
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running, quit this one
+  console.log("Another instance is already running. Quitting...");
+  app.quit();
+} else {
+  // Handle second instance launch - focus existing window
+  app.on("second-instance", () => {
+    console.log("Second instance detected, focusing existing window");
+    if (state.mainWindow) {
+      if (state.mainWindow.isMinimized()) {
+        state.mainWindow.restore();
+      }
+      if (!state.mainWindow.isVisible()) {
+        showWindowWithoutFocus();
+        state.isWindowVisible = true;
+      }
+      state.mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(initializeApp);
+}
 
 app.on("before-quit", () => {
   console.log("App is quitting. Cleaning up...");

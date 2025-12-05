@@ -29,6 +29,9 @@ export class SystemAudioHelper {
     lastError: null,
   };
   private dataBuffer: string = "";
+  private idleTimer: NodeJS.Timeout | null = null;
+  private lastStopTime: number | null = null;
+  private static readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
   constructor() {}
 
@@ -200,6 +203,9 @@ export class SystemAudioHelper {
    * Start the audio capture process
    */
   async start(): Promise<void> {
+    // Clear any pending idle timer since we're starting again
+    this.clearIdleTimer();
+
     if (this.audioProcess) {
       if (this.state.isCapturing) {
         console.log("[SystemAudio] Already capturing");
@@ -279,7 +285,8 @@ export class SystemAudioHelper {
   }
 
   /**
-   * Stop audio capture (but keep process running)
+   * Stop audio capture (but keep process running for quick restart)
+   * Starts an idle timer to shutdown after IDLE_TIMEOUT_MS if not restarted
    */
   async stop(): Promise<void> {
     if (!this.audioProcess) {
@@ -287,12 +294,42 @@ export class SystemAudioHelper {
     }
 
     this.sendCommand({ cmd: "stop" });
+    this.lastStopTime = Date.now();
+    this.startIdleTimer();
+  }
+
+  /**
+   * Start the idle timer to shutdown process after timeout
+   */
+  private startIdleTimer(): void {
+    this.clearIdleTimer();
+    
+    console.log(`[SystemAudio] Starting idle timer (${SystemAudioHelper.IDLE_TIMEOUT_MS / 1000 / 60} minutes)`);
+    
+    this.idleTimer = setTimeout(async () => {
+      if (!this.state.isCapturing && this.audioProcess) {
+        console.log("[SystemAudio] Idle timeout reached, shutting down process to free memory");
+        await this.shutdown();
+      }
+    }, SystemAudioHelper.IDLE_TIMEOUT_MS);
+  }
+
+  /**
+   * Clear the idle timer
+   */
+  private clearIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
   }
 
   /**
    * Shutdown the audio process completely
    */
   async shutdown(): Promise<void> {
+    this.clearIdleTimer();
+    
     if (!this.audioProcess) {
       return;
     }
