@@ -2,13 +2,9 @@
  * MeetingAssistantIndicator - A minimal indicator showing meeting assistant status
  * 
  * Shows when audio capture is active, live transcript, and processing status.
- * Includes a debug log panel for troubleshooting.
  * 
  * Keyboard shortcuts:
- * - Ctrl+D: Toggle debug panel
- * - Ctrl+Shift+C: Copy debug logs to clipboard
- * - Ctrl+P: Toggle prompt editor
- * - Ctrl+Shift+S: Send transcript to Gemini
+ * - Ctrl+Shift+A: Toggle recording (sends transcript when stopping)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -43,123 +39,86 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [transcript, setTranscript] = useState("");
   const [currentPartial, setCurrentPartial] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const [showDebug, setShowDebug] = useState(true);
-  const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
   
   // Ref to access current transcript in keyboard handler
   const transcriptRef = useRef("");
   const currentPartialRef = useRef("");
   const audioPromptRef = useRef(DEFAULT_AUDIO_PROMPT);
+  const wasCapturingRef = useRef(false);
 
   // Keep refs in sync
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
   useEffect(() => { currentPartialRef.current = currentPartial; }, [currentPartial]);
   useEffect(() => { audioPromptRef.current = audioPrompt; }, [audioPrompt]);
 
-  // Debug logger
-  const addLog = useCallback((msg: string) => {
-    const time = new Date().toLocaleTimeString();
-    setDebugLogs(prev => [...prev.slice(-15), `[${time}] ${msg}`]);
+  // Load audio prompt from settings on mount
+  useEffect(() => {
+    const loadAudioPrompt = async () => {
+      try {
+        const response = await (window as any).electronAPI?.getAudioPrompt?.();
+        if (response?.success && response.data?.prompt) {
+          setAudioPrompt(response.data.prompt);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio prompt from settings:", e);
+      }
+    };
+    loadAudioPrompt();
   }, []);
 
-  // Copy debug logs to clipboard
-  const copyDebugLogs = useCallback(() => {
-    const logsText = debugLogs.join('\n');
-    navigator.clipboard.writeText(logsText).then(() => {
-      addLog("📋 Debug logs copied to clipboard!");
-    }).catch((err) => {
-      addLog(`Failed to copy: ${err.message}`);
-    });
-  }, [debugLogs, addLog]);
-
-  // Send transcript to Gemini manually
+  // Send transcript to Gemini
   const sendTranscriptToGemini = useCallback(async () => {
     const fullText = transcriptRef.current + (currentPartialRef.current ? " " + currentPartialRef.current : "");
     
     if (fullText.length < 10) {
-      addLog("Not enough transcript to send (min 10 chars)");
       return;
     }
 
-    addLog(`Sending ${fullText.length} chars to Gemini (manual)...`);
     setIsProcessing(true);
 
     try {
       const finalPrompt = audioPromptRef.current.replace('{{TRANSCRIPT}}', fullText);
 
-      addLog("Calling processAudioTranscript (no screenshots)...");
       const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
-      addLog(`processAudioTranscript: ${JSON.stringify(result)}`);
       
       if (!result?.success) {
-        addLog("Fallback: Using setUserPrompt + triggerProcessScreenshots...");
         await (window as any).electronAPI?.setUserPrompt(finalPrompt);
         await (window as any).electronAPI?.triggerProcessScreenshots();
       }
-      
-      addLog("Done sending to Gemini!");
     } catch (err: any) {
-      addLog(`FAILED: ${err?.message || err}`);
+      console.error('Failed to send transcript:', err);
     } finally {
       setIsProcessing(false);
     }
-  }, [addLog]);
+  }, []);
 
-  // Keyboard shortcuts
+  // Listen for toggle events from keyboard shortcut (Ctrl+Shift+A)
   useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      // Ctrl+D: Toggle debug panel
-      if (e.ctrlKey && !e.shiftKey && e.key === 'd') {
-        e.preventDefault();
-        setShowDebug(prev => !prev);
-      }
-      // Ctrl+Shift+C: Copy debug logs
-      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-        e.preventDefault();
-        copyDebugLogs();
-      }
-      // Ctrl+P: Toggle prompt editor
-      if (e.ctrlKey && !e.shiftKey && e.key === 'p') {
-        e.preventDefault();
-        setShowPromptEditor(prev => !prev);
-      }
-      // Ctrl+Shift+S: Send transcript to Gemini
-      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
-        e.preventDefault();
+    const handleToggle = async (data: { isCapturing: boolean }) => {
+      // If stopping and we were capturing, send the transcript
+      if (!data.isCapturing && wasCapturingRef.current) {
         await sendTranscriptToGemini();
       }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [copyDebugLogs, sendTranscriptToGemini]);
-
-  // Listen for toggle events from keyboard shortcut
-  useEffect(() => {
-    const handleToggle = (data: { isCapturing: boolean }) => {
-      addLog(`Toggle: isCapturing=${data.isCapturing}`);
+      
+      wasCapturingRef.current = data.isCapturing;
       setIsCapturing(data.isCapturing);
       setError(null);
       setShowNotification(true);
       
       if (!data.isCapturing) {
-        addLog("Stopping - will clear in 5s");
         setTimeout(() => {
           setShowNotification(false);
           setTranscript("");
           setCurrentPartial("");
         }, 5000);
       } else {
-        addLog("Starting - reset transcript");
         setTranscript("");
         setCurrentPartial("");
       }
     };
 
     const handleError = (data: { message: string }) => {
-      addLog(`ERROR: ${data.message}`);
       setError(data.message);
       setShowNotification(true);
       setTimeout(() => {
@@ -170,7 +129,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
 
     const handleTranscript = (msg: TranscriptMessage) => {
       const text = msg.text?.trim() || "";
-      addLog(`Transcript (${msg.type}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`);
       
       if (!text) return;
       
@@ -186,7 +144,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         (text.startsWith("(") && text.endsWith(")") && text.length < 30);
       
       if (isNonSpeech) {
-        addLog(`Filtered: "${text}"`);
         return;
       }
 
@@ -195,79 +152,24 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       } else if (msg.type === "final" && text.length > 0) {
         setTranscript((prev) => prev + (prev ? " " : "") + text);
         setCurrentPartial("");
-        addLog(`Added to transcript, total len: ${transcript.length + text.length}`);
       }
     };
 
-    addLog("Initializing listeners...");
-    const hasSystemAudio = !!(window as any).systemAudio;
-    addLog(`systemAudio API: ${hasSystemAudio ? 'available' : 'NOT FOUND'}`);
-    
     const cleanupToggle = (window as any).systemAudio?.onToggled?.(handleToggle);
     const cleanupError = (window as any).systemAudio?.onError?.(handleError);
     const cleanupTranscript = (window as any).systemAudio?.onTranscript?.(handleTranscript);
-    
-    addLog(`Listeners: toggle=${!!cleanupToggle}, error=${!!cleanupError}, transcript=${!!cleanupTranscript}`);
     
     return () => {
       cleanupToggle?.();
       cleanupError?.();
       cleanupTranscript?.();
     };
-  }, []);
+  }, [sendTranscriptToGemini]);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
 
   return (
     <>
-      {/* Debug log panel - positioned on the LEFT side */}
-      {showDebug && debugLogs.length > 0 && (
-        <div className="fixed left-2 top-2 z-40 w-72">
-          <div className="bg-gray-900/95 text-green-400 px-3 py-2 rounded-lg text-[10px] font-mono shadow-lg max-h-48 overflow-y-auto">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-white/50">Debug Log (Ctrl+D to hide)</span>
-              <button 
-                onClick={copyDebugLogs}
-                className="text-white/50 hover:text-white text-[9px] px-1"
-                title="Copy logs (Ctrl+Shift+C)"
-              >
-                📋
-              </button>
-            </div>
-            {debugLogs.map((log, i) => (
-              <div key={i} className="text-green-400/80">{log}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Audio Prompt Editor - positioned below debug */}
-      {showPromptEditor && (
-        <div className="fixed left-2 top-56 z-40 w-80">
-          <div className="bg-gray-900/95 text-white px-3 py-2 rounded-lg text-[10px] shadow-lg">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-white/70 font-medium">Audio Prompt (Ctrl+P)</span>
-              <button 
-                onClick={() => setAudioPrompt(DEFAULT_AUDIO_PROMPT)}
-                className="text-blue-400 hover:text-blue-300 text-[9px] px-1"
-                title="Reset to default"
-              >
-                Reset
-              </button>
-            </div>
-            <textarea
-              value={audioPrompt}
-              onChange={(e) => setAudioPrompt(e.target.value)}
-              className="w-full h-40 bg-gray-800 text-white/90 text-[10px] p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none resize-none"
-              placeholder="Use {{TRANSCRIPT}} as placeholder for the transcript"
-            />
-            <div className="text-white/40 mt-1 text-[9px]">
-              Use {"{{TRANSCRIPT}}"} as placeholder
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main status area - positioned on the RIGHT */}
       <div className={`fixed top-2 right-2 flex flex-col gap-2 z-50 max-w-md ${className}`}>
         {/* Status bar */}
@@ -307,36 +209,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
               <span>🎤 Stopped</span>
             </div>
           )}
-
-          {/* Control buttons */}
-          <div className="flex gap-1">
-            <button 
-              onClick={sendTranscriptToGemini}
-              disabled={isProcessing || fullText.length < 10}
-              className={`px-2 py-1 rounded text-[10px] ${
-                fullText.length >= 10 && !isProcessing 
-                  ? 'bg-purple-600/90 text-white hover:bg-purple-500' 
-                  : 'bg-gray-800/90 text-white/40 cursor-not-allowed'
-              }`}
-              title="Ctrl+Shift+S - Send to Gemini"
-            >
-              🚀
-            </button>
-            <button 
-              onClick={() => setShowDebug(!showDebug)}
-              className={`px-2 py-1 rounded text-[10px] ${showDebug ? 'bg-green-700/90 text-white' : 'bg-gray-800/90 text-white/70'} hover:bg-gray-700`}
-              title="Ctrl+D"
-            >
-              🐛
-            </button>
-            <button 
-              onClick={() => setShowPromptEditor(!showPromptEditor)}
-              className={`px-2 py-1 rounded text-[10px] ${showPromptEditor ? 'bg-blue-700/90 text-white' : 'bg-gray-800/90 text-white/70'} hover:bg-gray-700`}
-              title="Ctrl+P - Edit Audio Prompt"
-            >
-              ✏️
-            </button>
-          </div>
         </div>
 
         {/* Live transcript */}
@@ -344,7 +216,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
           <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
             <div className="flex justify-between text-white/50 text-[10px] mb-1">
               <span>Live Transcript ({fullText.length} chars)</span>
-              <span className="text-purple-400">Ctrl+Shift+S to send</span>
+              <span className="text-purple-400">Stop recording to send</span>
             </div>
             <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
           </div>

@@ -957,6 +957,36 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   }, "get-default-system-prompt"));
 
   // ============================================================================
+  // Audio Prompt Configuration Handlers (for Meeting Assistant)
+  // ============================================================================
+  ipcMain.handle("get-audio-prompt", createSafeIpcHandler(async () => {
+    try {
+      const prompt = await getStoreValue("audio-prompt");
+      return { success: true, data: { prompt: prompt || null } };
+    } catch (error: any) {
+      console.error("Error getting audio prompt:", error);
+      return { success: false, error: "Failed to get audio prompt" };
+    }
+  }, "get-audio-prompt"));
+
+  ipcMain.handle("set-audio-prompt", createSafeIpcHandler(async (
+    _event: any,
+    prompt: string
+  ) => {
+    try {
+      const success = await setStoreValue("audio-prompt", prompt);
+      if (!success) {
+        return { success: false, error: "Failed to save audio prompt" };
+      }
+      console.log("Audio prompt saved successfully");
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting audio prompt:", error);
+      return { success: false, error: "Failed to save audio prompt" };
+    }
+  }, "set-audio-prompt"));
+
+  // ============================================================================
   // Auto Update Handlers
   // ============================================================================
   ipcMain.handle("check-for-auto-update", createSafeIpcHandler(async () => {

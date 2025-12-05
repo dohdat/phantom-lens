@@ -102,6 +102,16 @@ interface Window {
       data?: { prompt: string };
       error?: string;
     }>;
+    // Audio Prompt (for Meeting Assistant)
+    getAudioPrompt: () => Promise<{
+      success: boolean;
+      data?: { prompt: string | null };
+      error?: string;
+    }>;
+    setAudioPrompt: (prompt: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
     // Update check
     checkGitHubUpdate: () => Promise<{
       success: boolean;

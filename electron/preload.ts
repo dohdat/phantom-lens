@@ -119,6 +119,16 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  // Audio Prompt (for Meeting Assistant)
+  getAudioPrompt: () => Promise<{
+    success: boolean;
+    data?: { prompt: string | null };
+    error?: string;
+  }>;
+  setAudioPrompt: (prompt: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   // Usage Counter
   getAppOpenCount: () => Promise<{
     success: boolean;
@@ -426,6 +436,9 @@ const electronAPI = {
   getSystemPrompt: () => ipcRenderer.invoke("get-system-prompt"),
   setSystemPrompt: (prompt: string) => ipcRenderer.invoke("set-system-prompt", prompt),
   getDefaultSystemPrompt: () => ipcRenderer.invoke("get-default-system-prompt"),
+  // Audio Prompt (for Meeting Assistant)
+  getAudioPrompt: () => ipcRenderer.invoke("get-audio-prompt"),
+  setAudioPrompt: (prompt: string) => ipcRenderer.invoke("set-audio-prompt", prompt),
   // Auto Update
   checkForAutoUpdate: () => ipcRenderer.invoke("check-for-auto-update"),
   downloadAutoUpdate: () => ipcRenderer.invoke("download-auto-update"),

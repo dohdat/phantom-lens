@@ -75,6 +75,9 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   // System prompt state
   const [systemPrompt, setSystemPrompt] = useState("");
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  // Audio prompt state (for Meeting Assistant)
+  const [audioPrompt, setAudioPrompt] = useState("");
+  const [showAudioPromptEditor, setShowAudioPromptEditor] = useState(false);
   // Update state - persist once shown
   const [updateInfo, setUpdateInfo] = useState<{
     updateAvailable: boolean;
@@ -168,6 +171,16 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         }
       } catch (e) {
         console.warn("Failed to load system prompt:", e);
+      }
+
+      // Load audio prompt (for Meeting Assistant)
+      try {
+        const audioPromptResponse = await window.electronAPI.getAudioPrompt?.();
+        if (audioPromptResponse?.success && audioPromptResponse.data?.prompt) {
+          setAudioPrompt(audioPromptResponse.data.prompt);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio prompt:", e);
       }
     } catch (error) {
       console.error("Failed to load API configuration:", error);
@@ -1026,6 +1039,79 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   </div>
                   <p className="text-[10px] text-white/50 leading-relaxed">
                     Customize the AI system prompt. Click "Reset to Default" to restore the default interview-focused prompt.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Audio Prompt Editor (for Meeting Assistant) */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-white">Audio Prompt <span className="text-white/50 text-xs">(Meeting)</span></h3>
+                <button
+                  onClick={() => {
+                    if (!isInteractive) return;
+                    setShowAudioPromptEditor(!showAudioPromptEditor);
+                  }}
+                  disabled={!isInteractive}
+                  tabIndex={isInteractive ? 0 : -1}
+                  className={`text-xs px-2 py-1 rounded transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 hover:text-white hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                >
+                  {showAudioPromptEditor ? 'Hide' : 'Edit'}
+                </button>
+              </div>
+              {showAudioPromptEditor && (
+                <div className="space-y-2">
+                  <textarea
+                    value={audioPrompt}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setAudioPrompt(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    placeholder={`Enter audio prompt for meeting assistant...\n\nUse {{TRANSCRIPT}} as placeholder for the transcript.`}
+                    rows={8}
+                    className={`w-full px-3 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 resize-none ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!isInteractive) return;
+                        try {
+                          await window.electronAPI.setAudioPrompt?.(audioPrompt);
+                          console.log("Audio prompt saved");
+                        } catch (e) {
+                          console.error("Failed to save audio prompt:", e);
+                        }
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    >
+                      Save Audio Prompt
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isInteractive) return;
+                        setAudioPrompt("");
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-relaxed">
+                    Customize the prompt for Meeting Assistant (Ctrl+Shift+A to toggle recording). Use {"{{TRANSCRIPT}}"} as placeholder. Leave empty to use default.
                   </p>
                 </div>
               )}
