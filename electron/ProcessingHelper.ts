@@ -3,6 +3,12 @@ import { IProcessingHelperDeps } from "./main";
 import { ScreenshotHelper } from "./ScreenshotHelper";
 import fs from "node:fs";
 import process from "process";
+import sharp from "sharp";
+
+// Image optimization settings
+const IMAGE_MAX_WIDTH = 1920;
+const IMAGE_MAX_HEIGHT = 1080;
+const IMAGE_QUALITY = 80; // JPEG quality (0-100)
 
 export class ProcessingHelper {
   private deps: IProcessingHelperDeps;
@@ -80,6 +86,39 @@ export class ProcessingHelper {
       }
     });
     this.processingTimeouts.clear();
+  }
+
+  /**
+   * Optimize an image buffer for sending to Gemini API
+   * Resizes to max dimensions and converts to JPEG for smaller file size
+   */
+  private async optimizeImage(imageBuffer: Buffer): Promise<{ data: string; mimeType: string }> {
+    try {
+      const optimized = await sharp(imageBuffer)
+        .resize(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT, {
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: IMAGE_QUALITY })
+        .toBuffer();
+      
+      const originalSize = imageBuffer.length;
+      const optimizedSize = optimized.length;
+      const savings = ((originalSize - optimizedSize) / originalSize * 100).toFixed(1);
+      console.log(`[ImageOptimization] Optimized: ${(originalSize / 1024).toFixed(1)}KB -> ${(optimizedSize / 1024).toFixed(1)}KB (${savings}% smaller)`);
+      
+      return {
+        data: optimized.toString("base64"),
+        mimeType: "image/jpeg"
+      };
+    } catch (error) {
+      console.warn("[ImageOptimization] Failed to optimize image, using original:", error);
+      // Fallback to original PNG if optimization fails
+      return {
+        data: imageBuffer.toString("base64"),
+        mimeType: "image/png"
+      };
+    }
   }
 
   public async processScreenshots(): Promise<void> {
@@ -571,18 +610,18 @@ export class ProcessingHelper {
         throw new Error("API key not found. Please configure it in settings.");
       }
 
-      // Take a screenshot
+      // Get screenshots from queue
       const screenshotQueue = this.screenshotHelper.getScreenshotQueue();
       if (screenshotQueue.length === 0) {
-        // No screenshots in queue, take one now
         console.log("[AudioWithScreenshot] No screenshots in queue, proceeding without image");
       }
 
-      const screenshots = await Promise.all(
-        screenshotQueue.map(async (path) => ({
-          path,
-          data: fs.readFileSync(path).toString("base64"),
-        }))
+      // Read and optimize screenshots
+      const optimizedScreenshots = await Promise.all(
+        screenshotQueue.map(async (filePath) => {
+          const buffer = fs.readFileSync(filePath);
+          return this.optimizeImage(buffer);
+        })
       );
 
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -597,19 +636,19 @@ export class ProcessingHelper {
       signal.addEventListener("abort", abortHandler);
 
       try {
-        // Build content parts - audio prompt + images
+        // Build content parts - audio prompt + optimized images
         const contentParts: any[] = [prompt];
         
-        // Add images if available
-        if (screenshots.length > 0) {
-          const imageParts = screenshots.map((screenshot) => ({
+        // Add optimized images if available
+        if (optimizedScreenshots.length > 0) {
+          const imageParts = optimizedScreenshots.map((screenshot) => ({
             inlineData: {
-              mimeType: "image/png",
+              mimeType: screenshot.mimeType,
               data: screenshot.data,
             },
           }));
           contentParts.push(...imageParts);
-          console.log(`[AudioWithScreenshot] Added ${imageParts.length} screenshots to request`);
+          console.log(`[AudioWithScreenshot] Added ${imageParts.length} optimized screenshots to request`);
         }
 
         // Stream the response - uses audio prompt directly with images
