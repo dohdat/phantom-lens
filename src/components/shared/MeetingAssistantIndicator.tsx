@@ -134,21 +134,23 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     const handleToggle = async (data: { isCapturing: boolean }) => {
       // If stopping and we were capturing, send the transcript
       if (!data.isCapturing && wasCapturingRef.current) {
-        await stopAndSendTranscript();
+        // Hide immediately - don't show "processing" state
+        setIsCapturing(false);
+        setShowNotification(false);
+        // Send transcript in background
+        stopAndSendTranscript();
       }
       
       wasCapturingRef.current = data.isCapturing;
       setIsCapturing(data.isCapturing);
       setError(null);
-      setShowNotification(true);
       
       if (!data.isCapturing) {
-        setTimeout(() => {
-          setShowNotification(false);
-          setTranscript("");
-          setCurrentPartial("");
-        }, 5000);
+        // Clear immediately when stopping
+        setTranscript("");
+        setCurrentPartial("");
       } else {
+        setShowNotification(true);
         setTranscript("");
         setCurrentPartial("");
       }
@@ -186,6 +188,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       if (msg.type === "partial") {
         setCurrentPartial(text);
       } else if (msg.type === "final" && text.length > 0) {
+        // Only keep the last sentence for display, but accumulate for sending
         setTranscript((prev) => prev + (prev ? " " : "") + text);
         setCurrentPartial("");
       }
@@ -205,8 +208,13 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
   const isTransparent = useTransparencyMode();
 
-  // Don't render anything if not capturing and no notification
-  const shouldShow = isCapturing || isProcessing || (showNotification && (error || !isCapturing));
+  // Only show when actively capturing - hide immediately when stopped
+  const shouldShow = isCapturing || (showNotification && error);
+
+  // Get just the last part of the transcript for display (last ~100 chars)
+  const displayText = currentPartial || (transcript.length > 100 
+    ? "..." + transcript.slice(-100) 
+    : transcript);
 
   if (!shouldShow) {
     return null;
@@ -253,11 +261,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
               {error
                 ? "Recording Error"
-                : isProcessing
-                ? "Sending to Gemini..."
-                : isCapturing
-                ? "Recording Meeting"
-                : "Recording Stopped"}
+                : "Recording Meeting"}
             </span>
           </div>
 
@@ -274,22 +278,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
               >
                 Error
               </span>
-            ) : isProcessing ? (
-              <span 
-                className="text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1.5"
-                style={{
-                  background: 'rgba(59, 130, 246, 0.2)',
-                  color: 'rgba(147, 197, 253, 0.9)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)'
-                }}
-              >
-                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Processing
-              </span>
-            ) : isCapturing ? (
+            ) : (
               <span 
                 className="text-xs font-medium px-2 py-1 rounded-full flex items-center gap-1.5"
                 style={{
@@ -304,24 +293,13 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
                 </span>
                 Live
               </span>
-            ) : (
-              <span 
-                className="text-xs font-medium px-2 py-1 rounded-full"
-                style={{
-                  background: 'rgba(107, 114, 128, 0.2)',
-                  color: 'rgba(209, 213, 219, 0.9)',
-                  border: '1px solid rgba(107, 114, 128, 0.3)'
-                }}
-              >
-                Stopped
-              </span>
             )}
           </div>
         </div>
 
         {/* Content area - matches Response page content area */}
         <div 
-          className="overflow-y-auto text-sm leading-relaxed max-h-32 select-text"
+          className="overflow-y-auto text-sm leading-relaxed max-h-24 select-text"
           style={{ 
             background: 'transparent',
             padding: '0 16px 16px 48px',
@@ -332,15 +310,18 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             <div className="text-red-300/80 text-xs">
               {error}
             </div>
-          ) : isCapturing && fullText ? (
+          ) : isCapturing && displayText ? (
             <div>
               <div className="text-white/50 text-[10px] mb-2 flex justify-between">
-                <span>{fullText.length} characters</span>
-                <span className="text-purple-400">Ctrl+Shift+A to stop & send</span>
+                <span>{fullText.length} chars</span>
+                <span className="text-purple-400">Ctrl+Shift+A to send</span>
               </div>
               <div className="text-white/90 text-xs leading-relaxed">
-                {transcript}
-                <span className="text-yellow-300/80">{currentPartial}</span>
+                {currentPartial ? (
+                  <span className="text-yellow-300/80">{currentPartial}</span>
+                ) : (
+                  <span>{displayText}</span>
+                )}
               </div>
             </div>
           ) : isCapturing ? (
@@ -365,15 +346,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
                    }}></div>
               <span className="text-white/50 text-xs ml-2">Listening...</span>
             </div>
-          ) : isProcessing ? (
-            <div className="text-white/60 text-xs">
-              Sending transcript to Gemini for analysis...
-            </div>
-          ) : (
-            <div className="text-white/50 text-xs">
-              Recording stopped. Transcript sent for processing.
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
