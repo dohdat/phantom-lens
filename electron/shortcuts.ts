@@ -159,8 +159,7 @@ export class ShortcutsHelper {
         console.log("Command/Ctrl + Shift + A pressed. Toggling system audio capture...");
         if (process.platform === "win32") {
           try {
-            await systemAudioHelper.toggle();
-            const isCapturing = systemAudioHelper.isCapturing();
+            const isCapturing = await systemAudioHelper.toggle();
             console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"}`);
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {

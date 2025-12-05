@@ -2,6 +2,7 @@
  * MeetingAssistantIndicator - A minimal indicator showing meeting assistant status
  * 
  * Shows when audio capture is active, live transcript, and processing status.
+ * Includes a debug log panel for troubleshooting.
  */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -22,28 +23,36 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [transcript, setTranscript] = useState("");
   const [currentPartial, setCurrentPartial] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(true);
   
   // Silence detection for auto-send
   const silenceTimer = useRef<NodeJS.Timeout | null>(null);
   const lastProcessedLength = useRef(0);
 
+  // Debug logger
+  const addLog = (msg: string) => {
+    const time = new Date().toLocaleTimeString();
+    setDebugLogs(prev => [...prev.slice(-15), `[${time}] ${msg}`]);
+  };
+
   // Listen for toggle events from keyboard shortcut
   useEffect(() => {
     const handleToggle = (data: { isCapturing: boolean }) => {
-      console.log("[MeetingAssistant] Toggled:", data.isCapturing);
+      addLog(`Toggle: isCapturing=${data.isCapturing}`);
       setIsCapturing(data.isCapturing);
       setError(null);
       setShowNotification(true);
       
       if (!data.isCapturing) {
-        // Stopped - clear transcript after delay
+        addLog("Stopping - will clear in 5s");
         setTimeout(() => {
           setShowNotification(false);
           setTranscript("");
           setCurrentPartial("");
-        }, 3000);
+        }, 5000);
       } else {
-        // Started - reset transcript
+        addLog("Starting - reset transcript");
         setTranscript("");
         setCurrentPartial("");
         lastProcessedLength.current = 0;
@@ -51,7 +60,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     };
 
     const handleError = (data: { message: string }) => {
-      console.error("[MeetingAssistant] Error:", data.message);
+      addLog(`ERROR: ${data.message}`);
       setError(data.message);
       setShowNotification(true);
       setTimeout(() => {
@@ -61,42 +70,45 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     };
 
     const handleTranscript = (msg: TranscriptMessage) => {
-      console.log("[MeetingAssistant] Transcript:", msg.type, msg.text);
-      
-      // Filter out Whisper's special tokens for blank/silence/music
       const text = msg.text?.trim() || "";
+      addLog(`Transcript (${msg.type}): "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`);
+      
       if (!text) return;
       
+      // Filter out Whisper's special tokens
       const isNonSpeech = 
         text === "[Blank_Audio]" || text === "[BLANK_AUDIO]" ||
         text.toLowerCase().includes("blank audio") ||
         text === "[Music]" || text === "[MUSIC]" ||
-        text.toLowerCase().includes("music") && text.length < 20 ||
+        (text.toLowerCase().includes("music") && text.length < 20) ||
         text === "[Silence]" || text === "[SILENCE]" ||
         text === "..." || 
         (text.startsWith("[") && text.endsWith("]") && text.length < 30) ||
         (text.startsWith("(") && text.endsWith(")") && text.length < 30);
       
       if (isNonSpeech) {
-        console.log("[MeetingAssistant] Filtered non-speech:", text);
+        addLog(`Filtered: "${text}"`);
         return;
       }
 
       if (msg.type === "partial") {
         setCurrentPartial(text);
       } else if (msg.type === "final" && text.length > 0) {
-        setTranscript((prev) => {
-          const newTranscript = prev + (prev ? " " : "") + text;
-          console.log("[MeetingAssistant] Updated transcript:", newTranscript);
-          return newTranscript;
-        });
+        setTranscript((prev) => prev + (prev ? " " : "") + text);
         setCurrentPartial("");
+        addLog(`Added to transcript, total len: ${transcript.length + text.length}`);
       }
     };
 
+    addLog("Initializing listeners...");
+    const hasSystemAudio = !!(window as any).systemAudio;
+    addLog(`systemAudio API: ${hasSystemAudio ? 'available' : 'NOT FOUND'}`);
+    
     const cleanupToggle = (window as any).systemAudio?.onToggled?.(handleToggle);
     const cleanupError = (window as any).systemAudio?.onError?.(handleError);
     const cleanupTranscript = (window as any).systemAudio?.onTranscript?.(handleTranscript);
+    
+    addLog(`Listeners: toggle=${!!cleanupToggle}, error=${!!cleanupError}, transcript=${!!cleanupTranscript}`);
     
     return () => {
       cleanupToggle?.();
@@ -110,22 +122,18 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     const fullText = transcript + (currentPartial ? " " + currentPartial : "");
     
     if (isCapturing && fullText.length > lastProcessedLength.current && fullText.length >= 30) {
-      // Clear existing timer
       if (silenceTimer.current) {
         clearTimeout(silenceTimer.current);
       }
 
-      // Set new timer for silence detection
       silenceTimer.current = setTimeout(async () => {
         const newContent = fullText.slice(lastProcessedLength.current).trim();
         if (newContent.length >= 30) {
-          console.log("[MeetingAssistant] Silence detected, sending to Gemini...");
-          console.log("[MeetingAssistant] Transcript to send:", fullText);
+          addLog(`Silence detected! Sending ${fullText.length} chars to Gemini...`);
           setIsProcessing(true);
           lastProcessedLength.current = fullText.length;
 
           try {
-            // Create meeting assistant prompt
             const meetingPrompt = `You are an AI assistant helping an engineer during a meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions the engineer could ask.
 
 Guidelines:
@@ -138,19 +146,21 @@ Conversation transcript:
 
 Suggest questions:`;
 
-            console.log("[MeetingAssistant] Setting user prompt...");
+            addLog("Calling setUserPrompt...");
             const promptResult = await (window as any).electronAPI?.setUserPrompt(meetingPrompt);
-            console.log("[MeetingAssistant] setUserPrompt result:", promptResult);
+            addLog(`setUserPrompt: ${JSON.stringify(promptResult)}`);
             
-            console.log("[MeetingAssistant] Taking screenshot...");
-            const screenshotResult = await (window as any).electronAPI?.triggerScreenshot();
-            console.log("[MeetingAssistant] triggerScreenshot result:", screenshotResult);
+            addLog("Calling triggerScreenshot...");
+            const ssResult = await (window as any).electronAPI?.triggerScreenshot();
+            addLog(`triggerScreenshot: ${JSON.stringify(ssResult)}`);
             
-            console.log("[MeetingAssistant] Processing...");
-            const processResult = await (window as any).electronAPI?.triggerProcessScreenshots();
-            console.log("[MeetingAssistant] triggerProcessScreenshots result:", processResult);
-          } catch (err) {
-            console.error("[MeetingAssistant] Failed to send to Gemini:", err);
+            addLog("Calling triggerProcessScreenshots...");
+            const procResult = await (window as any).electronAPI?.triggerProcessScreenshots();
+            addLog(`triggerProcessScreenshots: ${JSON.stringify(procResult)}`);
+            
+            addLog("Done sending to Gemini!");
+          } catch (err: any) {
+            addLog(`FAILED: ${err?.message || err}`);
           } finally {
             setIsProcessing(false);
           }
@@ -165,22 +175,16 @@ Suggest questions:`;
     };
   }, [transcript, currentPartial, isCapturing]);
 
-  // Don't show anything if no notification needed
-  if (!showNotification && !isCapturing) {
-    return null;
-  }
-
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
 
   return (
     <div className={`fixed top-2 left-2 right-2 flex flex-col gap-2 z-50 ${className}`}>
       {/* Status bar */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {/* Error indicator */}
         {error && (
           <div className="flex items-center gap-1.5 bg-red-600/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <span>⚠️</span>
-            <span className="max-w-[300px] truncate">{error}</span>
+            <span>⚠️ {error}</span>
           </div>
         )}
         
@@ -191,7 +195,7 @@ Suggest questions:`;
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
             </span>
-            <span>🎤 Meeting Assistant</span>
+            <span>🎤 Recording</span>
           </div>
         )}
 
@@ -209,16 +213,34 @@ Suggest questions:`;
         {/* Stopped notification */}
         {!isCapturing && !error && showNotification && (
           <div className="flex items-center gap-1.5 bg-gray-700/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <span>🎤 Meeting Assistant Stopped</span>
+            <span>🎤 Stopped</span>
           </div>
         )}
+
+        {/* Toggle debug button */}
+        <button 
+          onClick={() => setShowDebug(!showDebug)}
+          className="bg-gray-800/90 text-white/70 px-2 py-1 rounded text-[10px] hover:bg-gray-700"
+        >
+          {showDebug ? "Hide" : "Show"} Debug
+        </button>
       </div>
 
       {/* Live transcript */}
       {isCapturing && fullText && (
-        <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-24 overflow-y-auto">
-          <div className="text-white/50 text-[10px] mb-1">Live Transcript:</div>
-          <div>{transcript}<span className="text-white/50">{currentPartial}</span></div>
+        <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
+          <div className="text-white/50 text-[10px] mb-1">Live Transcript ({fullText.length} chars):</div>
+          <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
+        </div>
+      )}
+
+      {/* Debug log panel */}
+      {showDebug && debugLogs.length > 0 && (
+        <div className="bg-gray-900/95 text-green-400 px-3 py-2 rounded-lg text-[10px] font-mono shadow-lg max-h-32 overflow-y-auto">
+          <div className="text-white/50 mb-1">Debug Log:</div>
+          {debugLogs.map((log, i) => (
+            <div key={i} className="text-green-400/80">{log}</div>
+          ))}
         </div>
       )}
     </div>

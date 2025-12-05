@@ -41,12 +41,22 @@ export class SystemAudioHelper {
 
   /**
    * Toggle audio capture on/off
+   * Returns the new capturing state
    */
-  async toggle(): Promise<void> {
-    if (this.state.isCapturing) {
+  async toggle(): Promise<boolean> {
+    const wasCapturing = this.state.isCapturing;
+    console.log(`[SystemAudio] Toggle called, wasCapturing: ${wasCapturing}`);
+    
+    if (wasCapturing) {
       await this.stop();
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return false;
     } else {
       await this.start();
+      // Wait for the started message to arrive
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return this.state.isCapturing;
     }
   }
 
@@ -149,10 +159,10 @@ export class SystemAudioHelper {
     // Toggle system audio capture
     ipcMain.handle("system-audio:toggle", async () => {
       try {
-        await this.toggle();
+        const isCapturing = await this.toggle();
         // Emit toggled event to notify the renderer
-        this.sendToRenderer("system-audio:toggled", { isCapturing: this.state.isCapturing });
-        return { success: true, isCapturing: this.state.isCapturing };
+        this.sendToRenderer("system-audio:toggled", { isCapturing });
+        return { success: true, isCapturing };
       } catch (error: any) {
         console.error("[SystemAudio] Toggle error:", error);
         return { success: false, error: error.message || String(error) };
