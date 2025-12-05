@@ -133,6 +133,15 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       wasCapturingRef.current = data.isCapturing;
       
       if (data.isCapturing) {
+        try {
+          const response = await (window as any).electronAPI?.getAudioPrompt?.();
+          if (response?.success && response.data?.prompt) {
+            setAudioPrompt(response.data.prompt);
+          }
+        } catch (e) {
+          console.warn("Failed to load audio prompt:", e);
+        }
+        
         setIsCapturing(true);
         setShowNotification(true);
         setError(null);
