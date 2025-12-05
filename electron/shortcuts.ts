@@ -96,10 +96,20 @@ export class ShortcutsHelper {
         }
       },
       
-      // HIDE WINDOW (not quit) - same as Ctrl+\
+      // HIDE WINDOW (not quit) - same behavior as Ctrl+\
       "CommandOrControl+Q": () => {
-        console.log("Command/Ctrl + Q pressed. Hiding window...");
+        console.log("Command/Ctrl + Q pressed. Toggling window visibility...");
+        const wasVisible = this.deps.isWindowUsable();
         this.deps.toggleMainWindow();
+        
+        // Unregister shortcuts when hidden so other apps can use them (e.g., Ctrl+R in Chrome)
+        if (wasVisible) {
+          console.log("[Shortcuts] Window hidden via Ctrl+Q, unregistering app shortcuts");
+          this.unregisterAppShortcuts();
+        } else {
+          console.log("[Shortcuts] Window shown via Ctrl+Q, registering app shortcuts");
+          this.registerAppShortcuts();
+        }
       },
       // Scroll response content - Alt + Up/Down
       "Alt+Up": () => {
