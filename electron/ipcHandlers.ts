@@ -383,6 +383,25 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     }
   }, "trigger-process-screenshots"));
 
+  // ===================== Audio-Only Processing IPC =====================
+  ipcMain.handle("process-audio-transcript", createSafeIpcHandler(async (_, prompt: string) => {
+    if (!deps.processingHelper) {
+      return { success: false, error: "Processing helper not available" };
+    }
+
+    try {
+      await deps.processingHelper.processAudioTranscript(prompt);
+      console.log("Audio transcript processing initiated successfully");
+      return { success: true, data: "Audio processing started" };
+    } catch (error: any) {
+      console.error("Error processing audio transcript:", error);
+      return { 
+        success: false, 
+        error: `Audio processing failed: ${error.message}` 
+      };
+    }
+  }, "process-audio-transcript"));
+
   // ===================== Follow-up Processing IPC =====================
   ipcMain.handle("process-follow-up", createSafeIpcHandler(async () => {
     try {

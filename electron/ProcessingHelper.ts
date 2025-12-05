@@ -287,6 +287,191 @@ export class ProcessingHelper {
     }
   }
 
+  /**
+   * Process audio transcript without screenshots - text-only route to Gemini
+   * This is used for meeting assistant to avoid sending screenshots with audio
+   */
+  public async processAudioTranscript(prompt: string): Promise<void> {
+    if (this.isCurrentlyProcessing) {
+      console.log("Processing already in progress. Skipping audio transcript call.");
+      return;
+    }
+
+    this.isCurrentlyProcessing = true;
+    const mainWindow = this.deps.getMainWindow();
+    if (!mainWindow) {
+      this.isCurrentlyProcessing = false;
+      return;
+    }
+
+    try {
+      // PERFORMANCE: Set properties before processing starts
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setSkipTaskbar(true);
+        mainWindow.setFocusable(false);
+        mainWindow.setIgnoreMouseEvents(true);
+        if (mainWindow.isFocused()) {
+          mainWindow.blur();
+        }
+      }
+
+      mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.INITIAL_START);
+
+      // Create abort controller
+      const abortController = this.createAbortController('main');
+      const { signal } = abortController;
+
+      try {
+        const result = await this.processAudioTranscriptHelper(prompt, signal);
+
+        if (!result.success) {
+          const errorMessage = result.error || "Failed to generate response. Please try again.";
+          console.log("Audio processing failed:", errorMessage);
+          
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            errorMessage
+          );
+          this.deps.setView("initial");
+          return;
+        }
+
+        // Success - set view to response
+        console.log("Setting view to response after successful audio processing");
+        try {
+          const main = require("./main");
+          main.saveResponseToHistory?.(result.data);
+        } catch {}
+        mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: result.data });
+        this.deps.setView("response");
+      } catch (error: any) {
+        console.error("Audio processing error:", error);
+
+        if (error.message === "Request aborted" || error.name === "AbortError") {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Processing was canceled by the user."
+          );
+        } else {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            error.message || "Server error. Please try again."
+          );
+        }
+        this.deps.setView("initial");
+      } finally {
+        this.currentProcessingAbortController = null;
+      }
+    } finally {
+      this.isCurrentlyProcessing = false;
+      this.clearProcessingTimeouts();
+    }
+  }
+
+  /**
+   * Helper to process audio transcript with Gemini - text only, no images
+   */
+  private async processAudioTranscriptHelper(
+    prompt: string,
+    signal: AbortSignal
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    let responseText = "";
+    let chunksSent = false;
+    let accumulatedText = "";
+
+    try {
+      const apiKey = process.env.API_KEY;
+      const model = await this.deps.getConfiguredModel();
+
+      if (!apiKey) {
+        throw new Error("API key not found. Please configure it in settings.");
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
+      const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
+
+      const mainWindow = this.deps.getMainWindow();
+
+      if (signal.aborted) throw new Error("Request aborted");
+
+      const abortHandler = () => {};
+      signal.addEventListener("abort", abortHandler);
+
+      try {
+        // Stream the response - TEXT ONLY, no images
+        const result = await geminiModel.generateContentStream([prompt]);
+
+        accumulatedText = "";
+        for await (const chunk of result.stream) {
+          if (signal.aborted) {
+            throw new Error("Request aborted");
+          }
+
+          const chunkText = chunk.text();
+          accumulatedText += chunkText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            chunksSent = true;
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+              { response: accumulatedText }
+            );
+          }
+        }
+
+        responseText = accumulatedText;
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            const main = require("./main");
+            main.saveResponseToHistory?.(responseText);
+          } catch {}
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+        }
+
+        return { success: true, data: responseText };
+      } finally {
+        try {
+          signal.removeEventListener("abort", abortHandler);
+        } catch (e) {}
+      }
+    } catch (error: any) {
+      const mainWindow = this.deps.getMainWindow();
+      console.error("Audio response generation error:", {
+        message: error.message,
+        chunksSent,
+      });
+
+      if (chunksSent) {
+        console.log("Chunks were already sent - allowing partial response");
+        if (mainWindow && !mainWindow.isDestroyed() && accumulatedText) {
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: accumulatedText });
+        }
+        return { success: true, data: accumulatedText || "" };
+      }
+
+      if (error.message === "Request aborted" || error.name === "AbortError") {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(
+            this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+            "Audio response generation canceled."
+          );
+        }
+        return { success: false, error: "Response generation canceled." };
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          this.deps.PROCESSING_EVENTS.INITIAL_RESPONSE_ERROR,
+          error.message || "Server error during audio response generation."
+        );
+      }
+      this.deps.setView("initial");
+      return { success: false, error: error.message || "Unknown error" };
+    }
+  }
+
   private async processScreenshotsHelper(
     screenshots: Array<{ path: string; data: string }>,
     signal: AbortSignal

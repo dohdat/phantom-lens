@@ -37,6 +37,7 @@ interface Window {
     processScreenshots: () => Promise<{ success: boolean; error?: string }>;
     triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>;
     processFollowUp: () => Promise<{ success: boolean; error?: string }>;
+    processAudioTranscript: (prompt: string) => Promise<{ success: boolean; error?: string }>;
     // movement
     triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>;
     triggerMoveRight: () => Promise<{ success: boolean; error?: string }>;

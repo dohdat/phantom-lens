@@ -3,9 +3,13 @@
  * 
  * Shows when audio capture is active, live transcript, and processing status.
  * Includes a debug log panel for troubleshooting.
+ * 
+ * Keyboard shortcuts:
+ * - Ctrl+D: Toggle debug panel
+ * - Ctrl+Shift+C: Copy debug logs to clipboard
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface MeetingAssistantIndicatorProps {
   className?: string;
@@ -16,6 +20,20 @@ interface TranscriptMessage {
   text: string;
 }
 
+const DEFAULT_AUDIO_PROMPT = `You are an AI assistant helping a senior software engineer during a technical meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions that a senior engineer would ask.
+
+Guidelines:
+- Focus on architecture decisions, trade-offs, and scalability
+- Ask about edge cases, error handling, and security implications
+- Clarify requirements, dependencies, and technical constraints
+- Questions should demonstrate deep technical understanding
+- Keep questions concise and professional
+
+Conversation transcript:
+"{{TRANSCRIPT}}"
+
+Suggest questions:`;
+
 export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIndicatorProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,16 +43,52 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [isProcessing, setIsProcessing] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [showDebug, setShowDebug] = useState(true);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
   
   // Silence detection for auto-send
   const silenceTimer = useRef<NodeJS.Timeout | null>(null);
   const lastProcessedLength = useRef(0);
 
   // Debug logger
-  const addLog = (msg: string) => {
+  const addLog = useCallback((msg: string) => {
     const time = new Date().toLocaleTimeString();
     setDebugLogs(prev => [...prev.slice(-15), `[${time}] ${msg}`]);
-  };
+  }, []);
+
+  // Copy debug logs to clipboard
+  const copyDebugLogs = useCallback(() => {
+    const logsText = debugLogs.join('\n');
+    navigator.clipboard.writeText(logsText).then(() => {
+      addLog("📋 Debug logs copied to clipboard!");
+    }).catch((err) => {
+      addLog(`Failed to copy: ${err.message}`);
+    });
+  }, [debugLogs, addLog]);
+
+  // Keyboard shortcuts for debug panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+D: Toggle debug panel
+      if (e.ctrlKey && e.key === 'd') {
+        e.preventDefault();
+        setShowDebug(prev => !prev);
+      }
+      // Ctrl+Shift+C: Copy debug logs
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        copyDebugLogs();
+      }
+      // Ctrl+P: Toggle prompt editor
+      if (e.ctrlKey && e.key === 'p') {
+        e.preventDefault();
+        setShowPromptEditor(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [copyDebugLogs]);
 
   // Listen for toggle events from keyboard shortcut
   useEffect(() => {
@@ -129,34 +183,24 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       silenceTimer.current = setTimeout(async () => {
         const newContent = fullText.slice(lastProcessedLength.current).trim();
         if (newContent.length >= 30) {
-          addLog(`Silence detected! Sending ${fullText.length} chars to Gemini...`);
+          addLog(`Silence detected! Sending ${fullText.length} chars to Gemini (audio-only)...`);
           setIsProcessing(true);
           lastProcessedLength.current = fullText.length;
 
           try {
-            const meetingPrompt = `You are an AI assistant helping an engineer during a meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions the engineer could ask.
+            // Use the custom audio prompt with transcript placeholder replaced
+            const finalPrompt = audioPrompt.replace('{{TRANSCRIPT}}', fullText);
 
-Guidelines:
-- Questions should be relevant to what was just discussed
-- Focus on technical clarification, requirements, or next steps
-- Keep questions concise and professional
-
-Conversation transcript:
-"${fullText}"
-
-Suggest questions:`;
-
-            addLog("Calling setUserPrompt...");
-            const promptResult = await (window as any).electronAPI?.setUserPrompt(meetingPrompt);
-            addLog(`setUserPrompt: ${JSON.stringify(promptResult)}`);
+            addLog("Calling processAudioTranscript (no screenshots)...");
+            const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
+            addLog(`processAudioTranscript: ${JSON.stringify(result)}`);
             
-            addLog("Calling triggerScreenshot...");
-            const ssResult = await (window as any).electronAPI?.triggerScreenshot();
-            addLog(`triggerScreenshot: ${JSON.stringify(ssResult)}`);
-            
-            addLog("Calling triggerProcessScreenshots...");
-            const procResult = await (window as any).electronAPI?.triggerProcessScreenshots();
-            addLog(`triggerProcessScreenshots: ${JSON.stringify(procResult)}`);
+            if (!result?.success) {
+              // Fallback to old method if new API not available
+              addLog("Fallback: Using setUserPrompt + triggerProcessScreenshots...");
+              await (window as any).electronAPI?.setUserPrompt(finalPrompt);
+              await (window as any).electronAPI?.triggerProcessScreenshots();
+            }
             
             addLog("Done sending to Gemini!");
           } catch (err: any) {
@@ -173,77 +217,128 @@ Suggest questions:`;
         clearTimeout(silenceTimer.current);
       }
     };
-  }, [transcript, currentPartial, isCapturing]);
+  }, [transcript, currentPartial, isCapturing, audioPrompt]);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
 
   return (
-    <div className={`fixed top-2 left-2 right-2 flex flex-col gap-2 z-50 ${className}`}>
-      {/* Status bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Error indicator */}
-        {error && (
-          <div className="flex items-center gap-1.5 bg-red-600/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <span>⚠️ {error}</span>
-          </div>
-        )}
-        
-        {/* Recording indicator */}
-        {isCapturing && !error && (
-          <div className="flex items-center gap-1.5 bg-red-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span>🎤 Recording</span>
-          </div>
-        )}
-
-        {/* Processing indicator */}
-        {isProcessing && (
-          <div className="flex items-center gap-1.5 bg-blue-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            <span>Asking Gemini...</span>
-          </div>
-        )}
-
-        {/* Stopped notification */}
-        {!isCapturing && !error && showNotification && (
-          <div className="flex items-center gap-1.5 bg-gray-700/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
-            <span>🎤 Stopped</span>
-          </div>
-        )}
-
-        {/* Toggle debug button */}
-        <button 
-          onClick={() => setShowDebug(!showDebug)}
-          className="bg-gray-800/90 text-white/70 px-2 py-1 rounded text-[10px] hover:bg-gray-700"
-        >
-          {showDebug ? "Hide" : "Show"} Debug
-        </button>
-      </div>
-
-      {/* Live transcript */}
-      {isCapturing && fullText && (
-        <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
-          <div className="text-white/50 text-[10px] mb-1">Live Transcript ({fullText.length} chars):</div>
-          <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
-        </div>
-      )}
-
-      {/* Debug log panel */}
+    <>
+      {/* Debug log panel - positioned on the LEFT side */}
       {showDebug && debugLogs.length > 0 && (
-        <div className="bg-gray-900/95 text-green-400 px-3 py-2 rounded-lg text-[10px] font-mono shadow-lg max-h-32 overflow-y-auto">
-          <div className="text-white/50 mb-1">Debug Log:</div>
-          {debugLogs.map((log, i) => (
-            <div key={i} className="text-green-400/80">{log}</div>
-          ))}
+        <div className="fixed left-2 top-2 z-40 w-72">
+          <div className="bg-gray-900/95 text-green-400 px-3 py-2 rounded-lg text-[10px] font-mono shadow-lg max-h-48 overflow-y-auto">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-white/50">Debug Log (Ctrl+D to hide)</span>
+              <button 
+                onClick={copyDebugLogs}
+                className="text-white/50 hover:text-white text-[9px] px-1"
+                title="Copy logs (Ctrl+Shift+C)"
+              >
+                📋
+              </button>
+            </div>
+            {debugLogs.map((log, i) => (
+              <div key={i} className="text-green-400/80">{log}</div>
+            ))}
+          </div>
         </div>
       )}
-    </div>
+
+      {/* Audio Prompt Editor - positioned below debug */}
+      {showPromptEditor && (
+        <div className="fixed left-2 top-56 z-40 w-80">
+          <div className="bg-gray-900/95 text-white px-3 py-2 rounded-lg text-[10px] shadow-lg">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-white/70 font-medium">Audio Prompt (Ctrl+P)</span>
+              <button 
+                onClick={() => setAudioPrompt(DEFAULT_AUDIO_PROMPT)}
+                className="text-blue-400 hover:text-blue-300 text-[9px] px-1"
+                title="Reset to default"
+              >
+                Reset
+              </button>
+            </div>
+            <textarea
+              value={audioPrompt}
+              onChange={(e) => setAudioPrompt(e.target.value)}
+              className="w-full h-40 bg-gray-800 text-white/90 text-[10px] p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none resize-none"
+              placeholder="Use {{TRANSCRIPT}} as placeholder for the transcript"
+            />
+            <div className="text-white/40 mt-1 text-[9px]">
+              Use {"{{TRANSCRIPT}}"} as placeholder
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main status area - positioned on the RIGHT */}
+      <div className={`fixed top-2 right-2 flex flex-col gap-2 z-50 max-w-md ${className}`}>
+        {/* Status bar */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Error indicator */}
+          {error && (
+            <div className="flex items-center gap-1.5 bg-red-600/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
+              <span>⚠️ {error}</span>
+            </div>
+          )}
+          
+          {/* Recording indicator */}
+          {isCapturing && !error && (
+            <div className="flex items-center gap-1.5 bg-red-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+              </span>
+              <span>🎤 Recording</span>
+            </div>
+          )}
+
+          {/* Processing indicator */}
+          {isProcessing && (
+            <div className="flex items-center gap-1.5 bg-blue-500/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Asking Gemini...</span>
+            </div>
+          )}
+
+          {/* Stopped notification */}
+          {!isCapturing && !error && showNotification && (
+            <div className="flex items-center gap-1.5 bg-gray-700/95 text-white px-3 py-1.5 rounded-lg text-xs font-medium shadow-lg">
+              <span>🎤 Stopped</span>
+            </div>
+          )}
+
+          {/* Control buttons */}
+          <div className="flex gap-1">
+            <button 
+              onClick={() => setShowDebug(!showDebug)}
+              className={`px-2 py-1 rounded text-[10px] ${showDebug ? 'bg-green-700/90 text-white' : 'bg-gray-800/90 text-white/70'} hover:bg-gray-700`}
+              title="Ctrl+D"
+            >
+              {showDebug ? "🐛" : "🐛"}
+            </button>
+            <button 
+              onClick={() => setShowPromptEditor(!showPromptEditor)}
+              className={`px-2 py-1 rounded text-[10px] ${showPromptEditor ? 'bg-blue-700/90 text-white' : 'bg-gray-800/90 text-white/70'} hover:bg-gray-700`}
+              title="Ctrl+P - Edit Audio Prompt"
+            >
+              ✏️
+            </button>
+          </div>
+        </div>
+
+        {/* Live transcript */}
+        {isCapturing && fullText && (
+          <div className="bg-black/80 text-white/90 px-3 py-2 rounded-lg text-xs shadow-lg max-h-20 overflow-y-auto">
+            <div className="text-white/50 text-[10px] mb-1">Live Transcript ({fullText.length} chars):</div>
+            <div>{transcript}<span className="text-yellow-300">{currentPartial}</span></div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
