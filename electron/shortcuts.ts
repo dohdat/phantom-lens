@@ -95,22 +95,6 @@ export class ShortcutsHelper {
           console.error("EMERGENCY: Recovery failed:", error);
         }
       },
-      
-      // HIDE WINDOW (not quit) - same behavior as Ctrl+\
-      "CommandOrControl+Q": () => {
-        console.log("Command/Ctrl + Q pressed. Toggling window visibility...");
-        const wasVisible = this.deps.isWindowUsable();
-        this.deps.toggleMainWindow();
-        
-        // Unregister shortcuts when hidden so other apps can use them (e.g., Ctrl+R in Chrome)
-        if (wasVisible) {
-          console.log("[Shortcuts] Window hidden via Ctrl+Q, unregistering app shortcuts");
-          this.unregisterAppShortcuts();
-        } else {
-          console.log("[Shortcuts] Window shown via Ctrl+Q, registering app shortcuts");
-          this.registerAppShortcuts();
-        }
-      },
       // Scroll response content - Alt + Up/Down
       "Alt+Up": () => {
         this.deps.scrollResponseBy(-120);
@@ -191,9 +175,6 @@ export class ShortcutsHelper {
     };
   }
 
-  // Shortcuts that should always remain registered (toggle shortcuts)
-  private readonly alwaysActiveShortcuts = ["CommandOrControl+Q"];
-
   private registerAppShortcuts(): void {
     Object.entries(this.shortcuts).forEach(([key, handler]) => {
       try {
@@ -215,11 +196,6 @@ export class ShortcutsHelper {
 
   private unregisterAppShortcuts(): void {
     Object.keys(this.shortcuts).forEach((key) => {
-      // Skip toggle shortcuts - they should always work
-      if (this.alwaysActiveShortcuts.includes(key)) {
-        console.log(`Keeping shortcut active: ${key}`);
-        return;
-      }
       try {
         globalShortcut.unregister(key);
         console.log(`Unregistered shortcut: ${key}`);
