@@ -4,6 +4,7 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <thread>
 
 namespace phantom {
 
@@ -158,13 +159,15 @@ std::string WhisperWrapper::transcribe(const std::vector<float>& samples) {
     params.print_special = false;
     params.translate = false;
     params.language = "en";
-    params.n_threads = 4;
+    params.n_threads = std::max(1u, std::thread::hardware_concurrency());  // Use all CPU cores
     params.offset_ms = 0;
     params.no_context = true;
     params.single_segment = true;
     
-    // Suppress blank tokens
+    // Speed optimizations
     params.suppress_blank = true;
+    params.flash_attn = true;       // Use flash attention if available
+    params.speed_up = false;        // Set to true for 2x speed (slight quality loss)
 
     // Run inference
     auto start = std::chrono::high_resolution_clock::now();

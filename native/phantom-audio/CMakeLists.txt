@@ -22,6 +22,13 @@ if(EXISTS "${WHISPER_DIR}/CMakeLists.txt")
     set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    
+    # GPU Acceleration (Vulkan - works with existing NVIDIA drivers)
+    set(GGML_VULKAN ON CACHE BOOL "Enable Vulkan GPU acceleration" FORCE)
+    
+    # Flash Attention for faster inference
+    set(WHISPER_FLASH_ATTN ON CACHE BOOL "Enable Flash Attention" FORCE)
+    
     add_subdirectory(${WHISPER_DIR})
 else()
     message(FATAL_ERROR "whisper.cpp not found. Run: git clone https://github.com/ggerganov/whisper.cpp.git in the phantom-audio directory")
