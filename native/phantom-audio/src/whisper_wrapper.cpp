@@ -164,10 +164,8 @@ std::string WhisperWrapper::transcribe(const std::vector<float>& samples) {
     params.no_context = true;
     params.single_segment = true;
     
-    // Speed optimizations
+    // Suppress blank tokens
     params.suppress_blank = true;
-    params.flash_attn = true;       // Use flash attention if available
-    params.speed_up = false;        // Set to true for 2x speed (slight quality loss)
 
     // Run inference
     auto start = std::chrono::high_resolution_clock::now();
