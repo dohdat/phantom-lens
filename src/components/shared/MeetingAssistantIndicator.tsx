@@ -67,7 +67,6 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [showNotification, setShowNotification] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [currentPartial, setCurrentPartial] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
   
   // Ref to access current transcript in keyboard handler
@@ -96,61 +95,47 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     loadAudioPrompt();
   }, []);
 
-  // Stop recording and send transcript to Gemini
-  const stopAndSendTranscript = useCallback(async () => {
-    // First, stop the recording if it's still active
-    try {
-      await (window as any).systemAudio?.stop?.();
-    } catch (err) {
-      console.error('Failed to stop recording:', err);
-    }
-    
-    const fullText = transcriptRef.current + (currentPartialRef.current ? " " + currentPartialRef.current : "");
-    
-    if (fullText.length < 10) {
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      const finalPrompt = audioPromptRef.current.replace('{{TRANSCRIPT}}', fullText);
-
-      const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
-      
-      if (!result?.success) {
-        await (window as any).electronAPI?.setUserPrompt(finalPrompt);
-        await (window as any).electronAPI?.triggerProcessScreenshots();
-      }
-    } catch (err: any) {
-      console.error('Failed to send transcript:', err);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, []);
-
   // Listen for toggle events from keyboard shortcut (Ctrl+Shift+A)
   useEffect(() => {
     const handleToggle = async (data: { isCapturing: boolean }) => {
       // If stopping and we were capturing, send the transcript
       if (!data.isCapturing && wasCapturingRef.current) {
-        // Hide immediately - don't show "processing" state
+        // Capture transcript values BEFORE clearing state
+        const capturedTranscript = transcriptRef.current;
+        const capturedPartial = currentPartialRef.current;
+        const capturedPrompt = audioPromptRef.current;
+        
+        // Hide indicator immediately
         setIsCapturing(false);
         setShowNotification(false);
-        // Send transcript in background
-        stopAndSendTranscript();
+        setTranscript("");
+        setCurrentPartial("");
+        
+        // Send transcript in background with captured values
+        const fullText = capturedTranscript + (capturedPartial ? " " + capturedPartial : "");
+        
+        if (fullText.length >= 10) {
+          try {
+            const finalPrompt = capturedPrompt.replace('{{TRANSCRIPT}}', fullText);
+            
+            const result = await (window as any).electronAPI?.processAudioTranscript?.(finalPrompt);
+            
+            if (!result?.success) {
+              await (window as any).electronAPI?.setUserPrompt(finalPrompt);
+              await (window as any).electronAPI?.triggerProcessScreenshots();
+            }
+          } catch (err: any) {
+            console.error('Failed to send transcript:', err);
+          }
+        }
       }
       
       wasCapturingRef.current = data.isCapturing;
-      setIsCapturing(data.isCapturing);
-      setError(null);
       
-      if (!data.isCapturing) {
-        // Clear immediately when stopping
-        setTranscript("");
-        setCurrentPartial("");
-      } else {
+      if (data.isCapturing) {
+        setIsCapturing(true);
         setShowNotification(true);
+        setError(null);
         setTranscript("");
         setCurrentPartial("");
       }
@@ -203,7 +188,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       cleanupError?.();
       cleanupTranscript?.();
     };
-  }, [stopAndSendTranscript]);
+  }, []);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
   const isTransparent = useTransparencyMode();
