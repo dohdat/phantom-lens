@@ -971,19 +971,21 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
   ipcMain.handle("get-default-audio-prompt", createSafeIpcHandler(async () => {
     try {
-      const defaultPrompt = `You are an AI assistant helping a senior software engineer during a technical meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions that a senior engineer would ask.
+      const defaultPrompt = `You are a senior software engineer participating in a technical meeting. Based on the conversation transcript below:
 
-Guidelines:
-- Focus on architecture decisions, trade-offs, and scalability
-- Ask about edge cases, error handling, and security implications
-- Clarify requirements, dependencies, and technical constraints
-- Questions should demonstrate deep technical understanding
-- Keep questions concise and professional
+      1. **Summary**: Provide a concise summary of the key points discussed
 
-Conversation transcript:
-"{{TRANSCRIPT}}"
+      2. **Clarifying Questions**: Ask smart, clarifying questions that demonstrate deep technical understanding:
+        - Focus on architecture decisions, trade-offs, and scalability
+        - Ask about edge cases, error handling, and security implications
+        - Clarify requirements, dependencies, and technical constraints
 
-Suggest questions:`;
+      Keep your response concise and professional.
+
+      Conversation transcript:
+      "{{TRANSCRIPT}}"
+
+      Your response:`;
       return { success: true, data: { prompt: defaultPrompt } };
     } catch (error: any) {
       console.error("Error getting default audio prompt:", error);

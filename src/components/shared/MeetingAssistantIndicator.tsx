@@ -18,19 +18,21 @@ interface TranscriptMessage {
   text: string;
 }
 
-const DEFAULT_AUDIO_PROMPT = `You are an AI assistant helping a senior software engineer during a technical meeting. Based on the conversation transcript below, suggest 2-3 smart, clarifying questions that a senior engineer would ask.
+const DEFAULT_AUDIO_PROMPT = `You are a senior software engineer participating in a technical meeting. Based on the conversation transcript below:
 
-Guidelines:
-- Focus on architecture decisions, trade-offs, and scalability
-- Ask about edge cases, error handling, and security implications
-- Clarify requirements, dependencies, and technical constraints
-- Questions should demonstrate deep technical understanding
-- Keep questions concise and professional
+1. **Summary**: Provide a concise summary of the key points discussed
+
+2. **Clarifying Questions**: Ask smart, clarifying questions that demonstrate deep technical understanding:
+   - Focus on architecture decisions, trade-offs, and scalability
+   - Ask about edge cases, error handling, and security implications
+   - Clarify requirements, dependencies, and technical constraints
+
+Keep your response concise and professional.
 
 Conversation transcript:
 "{{TRANSCRIPT}}"
 
-Suggest questions:`;
+Your response:`;
 
 export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIndicatorProps) {
   const [isCapturing, setIsCapturing] = useState(false);
@@ -178,7 +180,10 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   return (
     <>
       {/* Main status area - positioned on the RIGHT */}
-      <div className={`fixed top-2 right-2 flex flex-col gap-2 z-50 max-w-md ${className}`}>
+      <div 
+        className={`fixed top-2 flex flex-col gap-2 z-50 max-w-md ${className}`}
+        style={{ right: 'calc(0.5rem + 470px)' }}
+      >
         {/* Status bar */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Error indicator */}
