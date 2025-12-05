@@ -191,6 +191,9 @@ export class ShortcutsHelper {
     };
   }
 
+  // Shortcuts that should always remain registered (toggle shortcuts)
+  private readonly alwaysActiveShortcuts = ["CommandOrControl+Q"];
+
   private registerAppShortcuts(): void {
     Object.entries(this.shortcuts).forEach(([key, handler]) => {
       try {
@@ -212,6 +215,11 @@ export class ShortcutsHelper {
 
   private unregisterAppShortcuts(): void {
     Object.keys(this.shortcuts).forEach((key) => {
+      // Skip toggle shortcuts - they should always work
+      if (this.alwaysActiveShortcuts.includes(key)) {
+        console.log(`Keeping shortcut active: ${key}`);
+        return;
+      }
       try {
         globalShortcut.unregister(key);
         console.log(`Unregistered shortcut: ${key}`);
