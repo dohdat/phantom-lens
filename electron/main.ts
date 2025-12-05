@@ -1443,6 +1443,12 @@ if (!gotTheLock) {
         state.isWindowVisible = true;
       }
       state.mainWindow.focus();
+      
+      // Re-register app shortcuts since window is now visible
+      if (state.shortcutsHelper) {
+        console.log("[Second-instance] Re-registering app shortcuts");
+        state.shortcutsHelper.registerAppShortcuts();
+      }
     }
   });
 

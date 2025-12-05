@@ -175,7 +175,7 @@ export class ShortcutsHelper {
     };
   }
 
-  private registerAppShortcuts(): void {
+  public registerAppShortcuts(): void {
     Object.entries(this.shortcuts).forEach(([key, handler]) => {
       try {
         const isRegistered = globalShortcut.isRegistered(key);
