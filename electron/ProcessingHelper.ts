@@ -518,26 +518,65 @@ export class ProcessingHelper {
       signal.addEventListener("abort", abortHandler);
 
       try {
-        // Stream the response - TEXT ONLY, no images
+        // Stream the response with word-buffering - TEXT ONLY, no images
         const result = await geminiModel.generateContentStream([prompt]);
 
         accumulatedText = "";
+        let pendingBuffer = "";
+        let lastSentLength = 0;
+        const FLUSH_INTERVAL = 80;
+        let lastFlushTime = Date.now();
+        
+        const isWordBoundary = (char: string): boolean => {
+          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        };
+        
+        const flushToUI = (force: boolean = false) => {
+          const now = Date.now();
+          const timeSinceLastFlush = now - lastFlushTime;
+          
+          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+            let flushUpTo = pendingBuffer.length;
+            
+            if (!force) {
+              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                if (isWordBoundary(pendingBuffer[i])) {
+                  flushUpTo = i + 1;
+                  break;
+                }
+              }
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                return;
+              }
+            }
+            
+            const toFlush = pendingBuffer.slice(0, flushUpTo);
+            accumulatedText += toFlush;
+            pendingBuffer = pendingBuffer.slice(flushUpTo);
+            
+            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+              chunksSent = true;
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                { response: accumulatedText }
+              );
+              lastSentLength = accumulatedText.length;
+              lastFlushTime = now;
+            }
+          }
+        };
+
         for await (const chunk of result.stream) {
           if (signal.aborted) {
             throw new Error("Request aborted");
           }
 
           const chunkText = chunk.text();
-          accumulatedText += chunkText;
-
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            chunksSent = true;
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
-              { response: accumulatedText }
-            );
-          }
+          pendingBuffer += chunkText;
+          flushToUI(false);
         }
+        
+        flushToUI(true);
 
         responseText = accumulatedText;
 
@@ -651,26 +690,65 @@ export class ProcessingHelper {
           console.log(`[AudioWithScreenshot] Added ${imageParts.length} optimized screenshots to request`);
         }
 
-        // Stream the response - uses audio prompt directly with images
+        // Stream the response with word-buffering - uses audio prompt directly with images
         const result = await geminiModel.generateContentStream(contentParts);
 
         accumulatedText = "";
+        let pendingBuffer = "";
+        let lastSentLength = 0;
+        const FLUSH_INTERVAL = 80;
+        let lastFlushTime = Date.now();
+        
+        const isWordBoundary = (char: string): boolean => {
+          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        };
+        
+        const flushToUI = (force: boolean = false) => {
+          const now = Date.now();
+          const timeSinceLastFlush = now - lastFlushTime;
+          
+          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+            let flushUpTo = pendingBuffer.length;
+            
+            if (!force) {
+              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                if (isWordBoundary(pendingBuffer[i])) {
+                  flushUpTo = i + 1;
+                  break;
+                }
+              }
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                return;
+              }
+            }
+            
+            const toFlush = pendingBuffer.slice(0, flushUpTo);
+            accumulatedText += toFlush;
+            pendingBuffer = pendingBuffer.slice(flushUpTo);
+            
+            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+              chunksSent = true;
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                { response: accumulatedText }
+              );
+              lastSentLength = accumulatedText.length;
+              lastFlushTime = now;
+            }
+          }
+        };
+
         for await (const chunk of result.stream) {
           if (signal.aborted) {
             throw new Error("Request aborted");
           }
 
           const chunkText = chunk.text();
-          accumulatedText += chunkText;
-
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            chunksSent = true;
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
-              { response: accumulatedText }
-            );
-          }
+          pendingBuffer += chunkText;
+          flushToUI(false);
         }
+        
+        flushToUI(true);
 
         responseText = accumulatedText;
 
@@ -881,13 +959,65 @@ export class ProcessingHelper {
       const mainWindow = this.deps.getMainWindow();
 
       try {
-        // Stream the response with controlled pace
+        // Stream the response with word-buffering for smoother display
         const result = await geminiModel.generateContentStream([
           prompt,
           ...contentParts,
         ]);
 
         accumulatedText = "";
+        let pendingBuffer = ""; // Buffer for incomplete words
+        let lastSentLength = 0; // Track what we've already sent
+        const FLUSH_INTERVAL = 80; // Flush every 80ms minimum
+        let lastFlushTime = Date.now();
+        
+        // Helper to check if we're at a word boundary
+        const isWordBoundary = (char: string): boolean => {
+          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        };
+        
+        // Helper to flush buffered content to UI
+        const flushToUI = (force: boolean = false) => {
+          const now = Date.now();
+          const timeSinceLastFlush = now - lastFlushTime;
+          
+          // Only flush if we have new content and enough time has passed (or forced)
+          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+            // Find the last word boundary in the pending buffer
+            let flushUpTo = pendingBuffer.length;
+            
+            if (!force) {
+              // Look for the last word boundary to avoid cutting words
+              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                if (isWordBoundary(pendingBuffer[i])) {
+                  flushUpTo = i + 1;
+                  break;
+                }
+              }
+              // If no boundary found and buffer is small, wait for more
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                return;
+              }
+            }
+            
+            // Move flushed content to accumulated
+            const toFlush = pendingBuffer.slice(0, flushUpTo);
+            accumulatedText += toFlush;
+            pendingBuffer = pendingBuffer.slice(flushUpTo);
+            
+            // Send to UI
+            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+              chunksSent = true;
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                { response: accumulatedText }
+              );
+              lastSentLength = accumulatedText.length;
+              lastFlushTime = now;
+            }
+          }
+        };
+
         for await (const chunk of result.stream) {
           // Check for abort between chunks
           if (signal.aborted) {
@@ -895,17 +1025,14 @@ export class ProcessingHelper {
           }
           
           const chunkText = chunk.text();
-          accumulatedText += chunkText;
-
-          // Send chunk to UI for live markdown rendering
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            chunksSent = true; // Mark that we've sent at least one chunk
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
-              { response: accumulatedText }
-            );
-          }
+          pendingBuffer += chunkText;
+          
+          // Try to flush complete words
+          flushToUI(false);
         }
+        
+        // Flush any remaining content
+        flushToUI(true);
 
         responseText = accumulatedText;
 
@@ -1119,13 +1246,56 @@ export class ProcessingHelper {
       let followUpResponse = "";
 
       try {
-        // Stream the follow-up response with controlled pace
+        // Stream the follow-up response with word-buffering for smoother display
         const result = await geminiModel.generateContentStream([
           prompt,
           ...contentParts,
         ]);
 
         let accumulatedText = "";
+        let pendingBuffer = "";
+        let lastSentLength = 0;
+        const FLUSH_INTERVAL = 80;
+        let lastFlushTime = Date.now();
+        
+        const isWordBoundary = (char: string): boolean => {
+          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        };
+        
+        const flushToUI = (force: boolean = false) => {
+          const now = Date.now();
+          const timeSinceLastFlush = now - lastFlushTime;
+          
+          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+            let flushUpTo = pendingBuffer.length;
+            
+            if (!force) {
+              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                if (isWordBoundary(pendingBuffer[i])) {
+                  flushUpTo = i + 1;
+                  break;
+                }
+              }
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                return;
+              }
+            }
+            
+            const toFlush = pendingBuffer.slice(0, flushUpTo);
+            accumulatedText += toFlush;
+            pendingBuffer = pendingBuffer.slice(flushUpTo);
+            
+            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.FOLLOW_UP_CHUNK,
+                { response: accumulatedText }
+              );
+              lastSentLength = accumulatedText.length;
+              lastFlushTime = now;
+            }
+          }
+        };
+
         for await (const chunk of result.stream) {
           // Check for abort between chunks
           if (signal.aborted) {
@@ -1133,16 +1303,11 @@ export class ProcessingHelper {
           }
           
           const chunkText = chunk.text();
-          accumulatedText += chunkText;
-
-          // Send chunk to UI for live markdown rendering
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.FOLLOW_UP_CHUNK,
-              { response: accumulatedText }
-            );
-          }
+          pendingBuffer += chunkText;
+          flushToUI(false);
         }
+        
+        flushToUI(true);
 
         followUpResponse = accumulatedText;
 
