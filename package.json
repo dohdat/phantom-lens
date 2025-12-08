@@ -122,10 +122,6 @@
         {
           "from": "native/phantom-audio/build/bin/Release/phantom-audio.exe",
           "to": "phantom-audio.exe"
-        },
-        {
-          "from": "resources/models/whisper/ggml-small.en.q5_1.bin",
-          "to": "models/whisper/ggml-small.en.q5_1.bin"
         }
       ],
       "publish": {

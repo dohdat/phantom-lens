@@ -29,33 +29,13 @@ jobs:
         with:
           arch: x64
 
-      - name: Cache Whisper model
-        id: cache-whisper
-        uses: actions/cache@v4
-        with:
-          path: resources/models/whisper
-          key: whisper-model-ggml-small-en-q5_1
-
-      - name: Download Whisper model
-        if: steps.cache-whisper.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          mkdir -p resources/models/whisper
-          curl -L -o resources/models/whisper/ggml-small.en.q5_1.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin
-
-      - name: Cache whisper.cpp
-        id: cache-whisper-cpp
-        uses: actions/cache@v4
-        with:
-          path: native/phantom-audio/whisper.cpp
-          key: whisper-cpp-${{ hashFiles('native/phantom-audio/CMakeLists.txt') }}
-
-      - name: Clone whisper.cpp
-        if: steps.cache-whisper-cpp.outputs.cache-hit != 'true'
+      - name: Clone whisper.cpp for build
         shell: bash
         run: |
           cd native/phantom-audio
-          git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
+          if [ ! -d "whisper.cpp" ]; then
+            git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
+          fi
 
       - name: Cache phantom-audio build
         id: cache-phantom-audio

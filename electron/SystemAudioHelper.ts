@@ -7,6 +7,7 @@ import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { BrowserWindow, ipcMain, app } from "electron";
 import path from "path";
 import fs from "fs";
+import https from "https";
 
 interface TranscriptMessage {
   type: "ready" | "started" | "stopped" | "partial" | "final" | "error";
@@ -110,9 +111,94 @@ export class SystemAudioHelper {
   }
 
   /**
-   * Check if required files exist
+   * Download the Whisper model if missing
    */
-  private checkRequirements(): { valid: boolean; error?: string } {
+  private async downloadModel(modelPath: string): Promise<void> {
+    const modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin";
+    const modelDir = path.dirname(modelPath);
+
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(modelDir)) {
+      fs.mkdirSync(modelDir, { recursive: true });
+    }
+
+    console.log(`[SystemAudio] Downloading Whisper model from ${modelUrl}...`);
+
+    return new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(modelPath);
+      
+      https.get(modelUrl, (response) => {
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          // Handle redirect
+          const redirectUrl = response.headers.location;
+          if (!redirectUrl) {
+            reject(new Error("Redirect without location header"));
+            return;
+          }
+
+          https.get(redirectUrl, (redirectResponse) => {
+            const totalBytes = parseInt(redirectResponse.headers['content-length'] || '0', 10);
+            let downloadedBytes = 0;
+            let lastLoggedPercent = 0;
+
+            redirectResponse.on('data', (chunk) => {
+              downloadedBytes += chunk.length;
+              const percent = Math.floor((downloadedBytes / totalBytes) * 100);
+              if (percent >= lastLoggedPercent + 10) {
+                console.log(`[SystemAudio] Download progress: ${percent}%`);
+                lastLoggedPercent = percent;
+              }
+            });
+
+            redirectResponse.pipe(file);
+
+            file.on('finish', () => {
+              file.close();
+              console.log(`[SystemAudio] Model downloaded successfully to ${modelPath}`);
+              resolve();
+            });
+          }).on('error', (err) => {
+            fs.unlink(modelPath, () => {}); // Delete partial file
+            reject(err);
+          });
+        } else {
+          const totalBytes = parseInt(response.headers['content-length'] || '0', 10);
+          let downloadedBytes = 0;
+          let lastLoggedPercent = 0;
+
+          response.on('data', (chunk) => {
+            downloadedBytes += chunk.length;
+            const percent = Math.floor((downloadedBytes / totalBytes) * 100);
+            if (percent >= lastLoggedPercent + 10) {
+              console.log(`[SystemAudio] Download progress: ${percent}%`);
+              lastLoggedPercent = percent;
+            }
+          });
+
+          response.pipe(file);
+
+          file.on('finish', () => {
+            file.close();
+            console.log(`[SystemAudio] Model downloaded successfully to ${modelPath}`);
+            resolve();
+          });
+        }
+      }).on('error', (err) => {
+        fs.unlink(modelPath, () => {}); // Delete partial file
+        reject(err);
+      });
+
+      file.on('error', (err) => {
+        fs.unlink(modelPath, () => {});
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Check if required files exist, download model if missing
+   */
+  private async checkRequirements(): Promise<{ valid: boolean; error?: string }> {
     const execPath = this.getExecutablePath();
     const modelPath = this.getModelPath();
 
@@ -123,11 +209,17 @@ export class SystemAudioHelper {
       };
     }
 
+    // Check if model exists, download if missing
     if (!fs.existsSync(modelPath)) {
-      return {
-        valid: false,
-        error: `Whisper model not found at: ${modelPath}. Please download the model.`,
-      };
+      console.log(`[SystemAudio] Whisper model not found at: ${modelPath}. Downloading...`);
+      try {
+        await this.downloadModel(modelPath);
+      } catch (error: any) {
+        return {
+          valid: false,
+          error: `Failed to download Whisper model: ${error.message || String(error)}`,
+        };
+      }
     }
 
     return { valid: true };
@@ -189,8 +281,8 @@ export class SystemAudioHelper {
     });
 
     // Check if system audio is available
-    ipcMain.handle("system-audio:check-availability", () => {
-      const check = this.checkRequirements();
+    ipcMain.handle("system-audio:check-availability", async () => {
+      const check = await this.checkRequirements();
       return {
         success: check.valid,
         available: check.valid,
@@ -216,7 +308,7 @@ export class SystemAudioHelper {
       return;
     }
 
-    const check = this.checkRequirements();
+    const check = await this.checkRequirements();
     if (!check.valid) {
       throw new Error(check.error);
     }

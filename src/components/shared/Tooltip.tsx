@@ -1194,6 +1194,34 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   >Alt + ↑↓</kbd>
                 </div>
                 <div className="flex justify-between items-center py-1">
+                  <span className="text-white/80">Enable Click Mode</span>
+                  <kbd 
+                    className={`px-2 py-1 rounded-md text-white/90 font-mono text-xs ${isTransparent ? '' : 'bg-white/20 border border-white/30'}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >Ctrl + Shift + ,</kbd>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-white/80">Toggle Transparency</span>
+                  <kbd 
+                    className={`px-2 py-1 rounded-md text-white/90 font-mono text-xs ${isTransparent ? '' : 'bg-white/20 border border-white/30'}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >Ctrl + Shift + V</kbd>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-white/80">Audio Only</span>
+                  <kbd 
+                    className={`px-2 py-1 rounded-md text-white/90 font-mono text-xs ${isTransparent ? '' : 'bg-white/20 border border-white/30'}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >Ctrl + Shift + A</kbd>
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-white/80">Audio + Screenshot</span>
+                  <kbd 
+                    className={`px-2 py-1 rounded-md text-white/90 font-mono text-xs ${isTransparent ? '' : 'bg-white/20 border border-white/30'}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >Ctrl + Shift + S</kbd>
+                </div>
+                <div className="flex justify-between items-center py-1">
                   <span className="text-white/80">Quit Application</span>
                   <kbd 
                     className={`px-2 py-1 rounded-md text-white/90 font-mono text-xs ${isTransparent ? '' : 'bg-white/20 border border-white/30'}`}
