@@ -1153,6 +1153,25 @@ function toggleMainWindow(): void {
     console.log("Window is usable, hiding it.");
     if (state.mainWindow) {
       state.windowPosition = state.mainWindow.getBounds();
+      
+      // MEMORY OPTIMIZATION: Reduce memory usage when hidden
+      try {
+        // Enable background throttling to reduce CPU/memory usage
+        state.mainWindow.webContents.setBackgroundThrottling(true);
+        
+        // Reduce frame rate to minimum when hidden
+        state.mainWindow.webContents.setFrameRate(1);
+        
+        // Clear HTTP cache and other session data to free memory
+        state.mainWindow.webContents.session.clearCache().catch(() => {});
+        
+        // Clear code caches to free memory
+        state.mainWindow.webContents.session.clearCodeCaches({}).catch(() => {});
+        
+        console.log("[Memory] Applied memory optimizations for hidden state");
+      } catch (error) {
+        console.error("[Memory] Error applying memory optimizations:", error);
+      }
     }
     state.mainWindow?.hide();
     state.isWindowVisible = false;
@@ -1166,6 +1185,21 @@ function toggleMainWindow(): void {
     if (state.mainWindow && state.windowPosition) {
       console.log("Restoring window position to:", state.windowPosition);
       state.mainWindow.setBounds(state.windowPosition);
+    }
+    
+    // MEMORY OPTIMIZATION: Restore normal settings when showing
+    if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+      try {
+        // Disable background throttling for responsive UI
+        state.mainWindow.webContents.setBackgroundThrottling(false);
+        
+        // Restore normal frame rate
+        state.mainWindow.webContents.setFrameRate(30);
+        
+        console.log("[Memory] Restored normal settings for visible state");
+      } catch (error) {
+        console.error("[Memory] Error restoring normal settings:", error);
+      }
     }
     
     // Use helper function to show without stealing focus
