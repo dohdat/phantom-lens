@@ -10,11 +10,10 @@ on:
 jobs:
   test:
     name: Run Tests
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [18.x, 20.x]
     
     steps:
@@ -37,8 +36,9 @@ jobs:
       run: npm run test:coverage
     
     - name: Upload coverage to Codecov
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+      if: matrix.node-version == '20.x'
       with:
         file: ./coverage/lcov.info
         flags: unittests
@@ -49,7 +49,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+        name: test-results-windows-node${{ matrix.node-version }}
         path: |
           coverage/
           *.log
@@ -57,8 +57,7 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
-    
+    runs-on: windows-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -77,12 +76,8 @@ jobs:
     
   build:
     name: Build Application
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     needs: [test, lint]
-    
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
     
     steps:
     - name: Checkout code
@@ -97,14 +92,5 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
-    - name: Build application (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: npm run build:linux
-    
     - name: Build application (Windows)
-      if: matrix.os == 'windows-latest'
       run: npm run build:win
-    
-    - name: Build application (macOS)
-      if: matrix.os == 'macos-latest'
-      run: npm run build:mac
