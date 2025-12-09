@@ -31,7 +31,7 @@ describe('BrowserInjectionHelper', () => {
     (spawn as jest.Mock).mockReturnValue(mockProcess);
 
     // Mock exec for Windows commands
-    (exec as jest.Mock).mockImplementation((cmd, callback) => {
+    (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
       if (callback) {
         callback(null, '', '');
       }
@@ -188,7 +188,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should detect Chrome processes', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'chrome.exe                    1234', '');
         } else {
@@ -203,7 +203,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should detect Firefox processes', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'firefox.exe                   5678', '');
         } else {
@@ -218,7 +218,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should detect Edge processes', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'msedge.exe                    9012', '');
         } else {
@@ -239,7 +239,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should not inject into same process twice', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'chrome.exe                    1234', '');
         } else {
@@ -251,18 +251,18 @@ describe('BrowserInjectionHelper', () => {
       jest.advanceTimersByTime(3000);
       await Promise.resolve();
 
-      const firstExecCount = (exec as jest.Mock).mock.calls.length;
+      const firstExecCount = (exec as unknown as jest.Mock).mock.calls.length;
 
       // Second scan with same process
       jest.advanceTimersByTime(3000);
       await Promise.resolve();
 
       // Should not inject again into the same PID
-      expect((exec as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(firstExecCount);
+      expect((exec as unknown as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(firstExecCount);
     });
 
     it('should track injected processes', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'chrome.exe                    1234', '');
         } else if (cmd.includes('injector')) {
@@ -282,7 +282,7 @@ describe('BrowserInjectionHelper', () => {
     it('should handle injection failures', async () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('injector')) {
           callback(new Error('Injection failed'), '', '');
         } else {
@@ -353,7 +353,7 @@ describe('BrowserInjectionHelper', () => {
     it('should clean up tracked processes on stop', async () => {
       await browserInjectionHelper.startAutomaticInjection();
 
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('tasklist')) {
           callback(null, 'chrome.exe                    1234', '');
         } else {
@@ -374,7 +374,7 @@ describe('BrowserInjectionHelper', () => {
     it('should handle process scanning errors', async () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         callback(new Error('Command failed'), '', '');
       });
 
@@ -386,7 +386,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should continue monitoring after injection failure', async () => {
-      (exec as jest.Mock)
+      (exec as unknown as jest.Mock)
         .mockImplementationOnce((cmd, callback) => {
           callback(new Error('Failed'), '', '');
         })
@@ -423,7 +423,7 @@ describe('BrowserInjectionHelper', () => {
 
   describe('Target Browsers', () => {
     it('should target Chrome', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         if (cmd.includes('chrome.exe')) {
           callback(null, 'chrome.exe                    1234', '');
         } else {
@@ -439,7 +439,7 @@ describe('BrowserInjectionHelper', () => {
     });
 
     it('should target multiple browser types', async () => {
-      (exec as jest.Mock).mockImplementation((cmd, callback) => {
+      (exec as unknown as jest.Mock).mockImplementation((cmd, callback) => {
         callback(
           null,
           'chrome.exe                    1234\nfirefox.exe                   5678\nmsedge.exe                    9012',

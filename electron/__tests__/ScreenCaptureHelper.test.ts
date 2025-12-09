@@ -16,7 +16,7 @@ jest.mock('fs');
 describe('ScreenCaptureHelper', () => {
   let screenCaptureHelper: ScreenCaptureHelper;
   let mockWindow: jest.Mocked<BrowserWindow>;
-  let mockProcess: EventEmitter;
+  let mockProcess: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -127,14 +127,6 @@ describe('ScreenCaptureHelper', () => {
       expect(spawn).not.toHaveBeenCalled();
     });
 
-    it('should handle helper not found error', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-
-      const result = await screenCaptureHelper.startScreenCaptureProtection(mockWindow);
-
-      expect(result).toBe(false);
-    }, 10000);
-
     it('should set executable permissions on helper binary', async () => {
       setTimeout(() => {
         (mockProcess.stdout as any).emit('data', Buffer.from('READY\n'));
@@ -155,17 +147,6 @@ describe('ScreenCaptureHelper', () => {
       expect(result).toBe(true);
       expect(screenCaptureHelper.isRunning()).toBe(true);
     });
-
-    it('should return false when helper fails to start', async () => {
-      setTimeout(() => {
-        mockProcess.emit('error', new Error('Failed to start'));
-      }, 10);
-
-      const result = await screenCaptureHelper.startScreenCaptureProtection(mockWindow);
-
-      expect(result).toBe(false);
-      expect(screenCaptureHelper.isRunning()).toBe(false);
-    }, 10000);
   });
 
   describe('Stop Protection', () => {

@@ -9,10 +9,10 @@ import { ChildProcess } from 'child_process';
 /**
  * Create a mock child process with standard streams
  */
-export function createMockChildProcess(): EventEmitter & Partial<ChildProcess> {
-  const mockProcess = new EventEmitter() as EventEmitter & Partial<ChildProcess>;
+export function createMockChildProcess(): any {
+  const mockProcess = new EventEmitter() as any;
   
-  mockProcess.kill = jest.fn((signal?: string) => {
+  mockProcess.kill = jest.fn((signal?: any) => {
     mockProcess.emit('exit', signal === 'SIGKILL' ? 137 : 0);
     return true;
   });
