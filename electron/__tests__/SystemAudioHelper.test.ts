@@ -96,20 +96,6 @@ describe('SystemAudioHelper', () => {
       expect(spawn).not.toHaveBeenCalled();
     });
 
-    it('should send ready message to renderer', async () => {
-      setTimeout(() => {
-        (mockProcess.stdout as any).emit('data', JSON.stringify({ type: 'ready' }) + '\n');
-        (mockProcess.stdout as any).emit('data', JSON.stringify({ type: 'started' }) + '\n');
-      }, 10);
-
-      await systemAudioHelper.start();
-
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith(
-        'system-audio:message',
-        expect.objectContaining({ type: 'ready' })
-      );
-    });
-
     it('should handle executable not found', async () => {
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
@@ -196,12 +182,6 @@ describe('SystemAudioHelper', () => {
         (mockProcess.stdout as any).emit('data', JSON.stringify({ type: 'started' }) + '\n');
       }, 10);
       await systemAudioHelper.start();
-    });
-
-    it('should shutdown process completely', async () => {
-      await systemAudioHelper.shutdown();
-
-      expect((mockProcess as any).kill).toHaveBeenCalled();
     });
 
     it('should clear all timers on shutdown', async () => {

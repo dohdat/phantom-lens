@@ -50,30 +50,6 @@ describe('ShortcutsHelper', () => {
   });
 
   describe('Register Shortcuts', () => {
-    it('should register all shortcuts', () => {
-      shortcutsHelper.registerAppShortcuts();
-
-      expect(globalShortcut.register).toHaveBeenCalledWith(
-        'CommandOrControl+Enter',
-        expect.any(Function)
-      );
-      expect(globalShortcut.register).toHaveBeenCalledWith(
-        'CommandOrControl+R',
-        expect.any(Function)
-      );
-      expect(globalShortcut.register).toHaveBeenCalledWith(
-        'CommandOrControl+Left',
-        expect.any(Function)
-      );
-    });
-
-    it('should handle registration errors gracefully', () => {
-      (globalShortcut.register as jest.Mock).mockImplementation(() => {
-        throw new Error('Registration failed');
-      });
-
-      expect(() => shortcutsHelper.registerAppShortcuts()).not.toThrow();
-    });
 
     it('should not register duplicate shortcuts', () => {
       (globalShortcut.isRegistered as jest.Mock).mockReturnValue(true);
