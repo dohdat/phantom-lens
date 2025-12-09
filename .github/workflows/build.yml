@@ -25,6 +25,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -57,7 +58,7 @@ jobs:
           cmake --build . --config Release
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Windows executable (dev)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
