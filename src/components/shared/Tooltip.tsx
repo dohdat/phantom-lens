@@ -78,6 +78,11 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   // Audio prompt state (for Meeting Assistant)
   const [audioPrompt, setAudioPrompt] = useState("");
   const [showAudioPromptEditor, setShowAudioPromptEditor] = useState(false);
+  // Audio route model state
+  const [audioOnlyModel, setAudioOnlyModel] = useState("gemini-2.5-flash");
+  const [audioScreenshotModel, setAudioScreenshotModel] = useState("gemini-2.5-flash");
+  // Whisper model state
+  const [whisperModelPath, setWhisperModelPath] = useState("");
   // Update state - persist once shown
   const [updateInfo, setUpdateInfo] = useState<{
     updateAvailable: boolean;
@@ -187,6 +192,41 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         }
       } catch (e) {
         console.warn("Failed to load audio prompt:", e);
+      }
+
+      // Load audio route models
+      try {
+        const audioOnlyModelResponse = await window.electronAPI.getAudioOnlyModel?.();
+        if (audioOnlyModelResponse?.success && audioOnlyModelResponse.data?.model) {
+          setAudioOnlyModel(audioOnlyModelResponse.data.model);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio-only model:", e);
+      }
+
+      try {
+        const audioScreenshotModelResponse = await window.electronAPI.getAudioScreenshotModel?.();
+        if (audioScreenshotModelResponse?.success && audioScreenshotModelResponse.data?.model) {
+          setAudioScreenshotModel(audioScreenshotModelResponse.data.model);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio-screenshot model:", e);
+      }
+
+      // Load Whisper model path
+      try {
+        const whisperModelPathResponse = await window.electronAPI.getWhisperModelPath?.();
+        if (whisperModelPathResponse?.success && whisperModelPathResponse.data?.modelPath) {
+          setWhisperModelPath(whisperModelPathResponse.data.modelPath);
+        } else {
+          // Load default path for display
+          const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
+          if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
+            setWhisperModelPath(defaultPathResponse.data.modelPath);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load Whisper model path:", e);
       }
     } catch (error) {
       console.error("Failed to load API configuration:", error);
@@ -1128,6 +1168,150 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Audio Route Models */}
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-white mb-2 text-center">Audio Route Models</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Audio Only <span className="text-white/50">(Ctrl+Shift+A)</span></label>
+                  <select
+                    value={audioOnlyModel}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setAudioOnlyModel(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >
+                    {MODEL_OPTIONS.map((model, index) => (
+                      <option key={model.id} value={model.id} className="bg-gray-800 text-white">
+                        {index + 1}. {model.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Audio + Screenshot <span className="text-white/50">(Ctrl+Shift+S)</span></label>
+                  <select
+                    value={audioScreenshotModel}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setAudioScreenshotModel(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >
+                    {MODEL_OPTIONS.map((model, index) => (
+                      <option key={model.id} value={model.id} className="bg-gray-800 text-white">
+                        {index + 1}. {model.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!isInteractive) return;
+                    try {
+                      await window.electronAPI.setAudioOnlyModel?.(audioOnlyModel);
+                      await window.electronAPI.setAudioScreenshotModel?.(audioScreenshotModel);
+                      console.log("Audio route models saved");
+                    } catch (e) {
+                      console.error("Failed to save audio route models:", e);
+                    }
+                  }}
+                  disabled={!isInteractive}
+                  tabIndex={isInteractive ? 0 : -1}
+                  className={`w-full px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                  style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                >
+                  Save Audio Models
+                </button>
+                <p className="text-[10px] text-white/50 leading-relaxed text-center">
+                  Choose which AI model to use for audio-only and audio+screenshot routes.
+                </p>
+              </div>
+            </div>
+
+            {/* Whisper Model Configuration */}
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-white mb-2 text-center">Whisper Model Path</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Model File Path</label>
+                  <input
+                    type="text"
+                    value={whisperModelPath}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setWhisperModelPath(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    placeholder="ggml-small.en-q8_0.bin or C:\\full\\path\\to\\model.bin"
+                    className={`w-full px-4 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-green-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!isInteractive) return;
+                      try {
+                        await window.electronAPI.setWhisperModelPath?.(whisperModelPath);
+                        console.log("Whisper model path saved");
+                      } catch (e) {
+                        console.error("Failed to save Whisper model path:", e);
+                      }
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-green-500/20 text-green-200 border border-green-500/30 hover:bg-green-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >
+                    Save Model Path
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!isInteractive) return;
+                      try {
+                        const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
+                        if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
+                          setWhisperModelPath(defaultPathResponse.data.modelPath);
+                        }
+                      } catch (e) {
+                        console.error("Failed to load default Whisper model path:", e);
+                      }
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/50 leading-relaxed text-center">
+                  Specify a Whisper model filename (e.g., ggml-base.en.bin, ggml-small.en-q8_0.bin) or full path. The model will be automatically downloaded from Hugging Face if it doesn't exist. Leave empty to use default.
+                </p>
+              </div>
             </div>
 
             {/* Comprehensive Shortcuts Section */}

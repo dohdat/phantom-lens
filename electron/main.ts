@@ -338,6 +338,8 @@ export interface IProcessingHelperDeps {
   getView: () => "initial" | "response" | "followup";
   setView: (view: "initial" | "response" | "followup") => void;
   getConfiguredModel: () => Promise<string>;
+  getAudioOnlyModel: () => Promise<string>;
+  getAudioScreenshotModel: () => Promise<string>;
   getSystemPrompt: () => Promise<string | null>;
   setHasFollowedUp: (hasFollowedUp: boolean) => void;
   clearQueues: () => void;
@@ -894,6 +896,8 @@ function initializeHelpers() {
     setHasFollowedUp,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     getConfiguredModel,
+    getAudioOnlyModel,
+    getAudioScreenshotModel,
     getSystemPrompt,
     getUserPrompt: () => state.currentPrompt,
     clearUserPrompt: () => { state.currentPrompt = null; },
@@ -1440,6 +1444,24 @@ async function getConfiguredModel(): Promise<string> {
   } catch (error) {
     console.error("Error getting configured model from store:", error);
     return "gemini-2.0-flash";
+  }
+}
+
+async function getAudioOnlyModel(): Promise<string> {
+  try {
+    return (await getStoreValue("audio-only-model")) || "gemini-2.5-flash";
+  } catch (error) {
+    console.error("Error getting audio-only model from store:", error);
+    return "gemini-2.5-flash";
+  }
+}
+
+async function getAudioScreenshotModel(): Promise<string> {
+  try {
+    return (await getStoreValue("audio-screenshot-model")) || "gemini-2.5-flash";
+  } catch (error) {
+    console.error("Error getting audio-screenshot model from store:", error);
+    return "gemini-2.5-flash";
   }
 }
 

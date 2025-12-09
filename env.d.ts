@@ -112,6 +112,40 @@ interface Window {
       success: boolean;
       error?: string;
     }>;
+    // Audio Route Models
+    getAudioOnlyModel: () => Promise<{
+      success: boolean;
+      data?: { model: string };
+      error?: string;
+    }>;
+    setAudioOnlyModel: (model: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getAudioScreenshotModel: () => Promise<{
+      success: boolean;
+      data?: { model: string };
+      error?: string;
+    }>;
+    setAudioScreenshotModel: (model: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    // Whisper Model
+    getWhisperModelPath: () => Promise<{
+      success: boolean;
+      data?: { modelPath: string | null };
+      error?: string;
+    }>;
+    setWhisperModelPath: (modelPath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getDefaultWhisperModelPath: () => Promise<{
+      success: boolean;
+      data?: { modelPath: string };
+      error?: string;
+    }>;
     // Update check
     checkGitHubUpdate: () => Promise<{
       success: boolean;

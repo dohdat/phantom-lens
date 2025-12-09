@@ -95,9 +95,9 @@ export class SystemAudioHelper {
   }
 
   /**
-   * Get the path to the Whisper model
+   * Get the default path to the Whisper model
    */
-  private getModelPath(): string {
+  public static getDefaultModelPath(): string {
     const isDev = process.env.NODE_ENV === "development";
     const modelName = "ggml-small.en.q5_1.bin";
     
@@ -111,18 +111,57 @@ export class SystemAudioHelper {
   }
 
   /**
+   * Get the path to the Whisper model (custom or default)
+   */
+  private async getModelPath(): Promise<string> {
+    try {
+      const { getStoreValue } = await import("./main");
+      const customPath = await getStoreValue("whisper-model-path");
+      if (customPath && typeof customPath === "string" && customPath.trim()) {
+        const trimmedPath = customPath.trim();
+        
+        // Check if it's a full path or just a filename
+        if (path.isAbsolute(trimmedPath)) {
+          console.log(`[SystemAudio] Using custom Whisper model path: ${trimmedPath}`);
+          return trimmedPath;
+        } else {
+          // If it's just a filename, place it in the default whisper models directory
+          const isDev = process.env.NODE_ENV === "development";
+          const modelsDir = isDev
+            ? path.join(app.getAppPath(), "resources", "models", "whisper")
+            : path.join(process.resourcesPath, "models", "whisper");
+          
+          const fullPath = path.join(modelsDir, trimmedPath);
+          console.log(`[SystemAudio] Using custom Whisper model filename: ${trimmedPath}`);
+          console.log(`[SystemAudio] Full path: ${fullPath}`);
+          return fullPath;
+        }
+      }
+    } catch (error) {
+      console.warn("[SystemAudio] Failed to get custom model path, using default:", error);
+    }
+    return SystemAudioHelper.getDefaultModelPath();
+  }
+
+  /**
    * Download the Whisper model if missing
+   * Automatically constructs the download URL based on the model filename
    */
   private async downloadModel(modelPath: string): Promise<void> {
-    const modelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin";
+    const modelFileName = path.basename(modelPath);
     const modelDir = path.dirname(modelPath);
+
+    // Construct Hugging Face URL based on model name
+    // Supports both formats: ggml-small.en-q5_1.bin and ggml-small.en.q5_1.bin
+    const modelUrl = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${modelFileName}`;
 
     // Create directory if it doesn't exist
     if (!fs.existsSync(modelDir)) {
       fs.mkdirSync(modelDir, { recursive: true });
     }
 
-    console.log(`[SystemAudio] Downloading Whisper model from ${modelUrl}...`);
+    console.log(`[SystemAudio] Downloading Whisper model: ${modelFileName}`);
+    console.log(`[SystemAudio] Download URL: ${modelUrl}`);
 
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(modelPath);
@@ -199,8 +238,8 @@ export class SystemAudioHelper {
    * Check if required files exist, download model if missing
    */
   private async checkRequirements(): Promise<{ valid: boolean; error?: string }> {
-    const execPath = this.getExecutablePath();
-    const modelPath = this.getModelPath();
+    const exePath = this.getExecutablePath();
+    const modelPath = await this.getModelPath();
 
     if (!fs.existsSync(execPath)) {
       return {
@@ -314,7 +353,7 @@ export class SystemAudioHelper {
     }
 
     const execPath = this.getExecutablePath();
-    const modelPath = this.getModelPath();
+    const modelPath = await this.getModelPath();
 
     console.log("[SystemAudio] Starting phantom-audio process");
     console.log("[SystemAudio] Executable:", execPath);

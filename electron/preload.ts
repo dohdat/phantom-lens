@@ -135,6 +135,40 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  // Audio Route Models
+  getAudioOnlyModel: () => Promise<{
+    success: boolean;
+    data?: { model: string };
+    error?: string;
+  }>;
+  setAudioOnlyModel: (model: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getAudioScreenshotModel: () => Promise<{
+    success: boolean;
+    data?: { model: string };
+    error?: string;
+  }>;
+  setAudioScreenshotModel: (model: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  // Whisper Model
+  getWhisperModelPath: () => Promise<{
+    success: boolean;
+    data?: { modelPath: string | null };
+    error?: string;
+  }>;
+  setWhisperModelPath: (modelPath: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getDefaultWhisperModelPath: () => Promise<{
+    success: boolean;
+    data?: { modelPath: string };
+    error?: string;
+  }>;
   // Usage Counter
   getAppOpenCount: () => Promise<{
     success: boolean;
@@ -447,6 +481,15 @@ const electronAPI = {
   getAudioPrompt: () => ipcRenderer.invoke("get-audio-prompt"),
   getDefaultAudioPrompt: () => ipcRenderer.invoke("get-default-audio-prompt"),
   setAudioPrompt: (prompt: string) => ipcRenderer.invoke("set-audio-prompt", prompt),
+  // Audio Route Models
+  getAudioOnlyModel: () => ipcRenderer.invoke("get-audio-only-model"),
+  setAudioOnlyModel: (model: string) => ipcRenderer.invoke("set-audio-only-model", model),
+  getAudioScreenshotModel: () => ipcRenderer.invoke("get-audio-screenshot-model"),
+  setAudioScreenshotModel: (model: string) => ipcRenderer.invoke("set-audio-screenshot-model", model),
+  // Whisper Model
+  getWhisperModelPath: () => ipcRenderer.invoke("get-whisper-model-path"),
+  setWhisperModelPath: (modelPath: string) => ipcRenderer.invoke("set-whisper-model-path", modelPath),
+  getDefaultWhisperModelPath: () => ipcRenderer.invoke("get-default-whisper-model-path"),
   // Auto Update
   checkForAutoUpdate: () => ipcRenderer.invoke("check-for-auto-update"),
   downloadAutoUpdate: () => ipcRenderer.invoke("download-auto-update"),

@@ -1035,6 +1035,116 @@ Your response:`;
   }, "set-audio-prompt"));
 
   // ============================================================================
+  // Audio Route Model Handlers
+  // ============================================================================
+  ipcMain.handle("get-audio-only-model", createSafeIpcHandler(async () => {
+    try {
+      const model = (await getStoreValue("audio-only-model")) || "gemini-2.5-flash";
+      return { success: true, data: { model } };
+    } catch (error: any) {
+      console.error("Error getting audio-only model:", error);
+      return { success: false, error: "Failed to get audio-only model" };
+    }
+  }, "get-audio-only-model"));
+
+  ipcMain.handle("set-audio-only-model", createSafeIpcHandler(async (
+    _event: any,
+    model: string
+  ) => {
+    try {
+      if (!model || typeof model !== "string") {
+        return { success: false, error: "Invalid model provided" };
+      }
+      
+      const success = await setStoreValue("audio-only-model", model.trim());
+      if (!success) {
+        return { success: false, error: "Failed to save audio-only model" };
+      }
+      console.log(`Audio-only model set to: ${model.trim()}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting audio-only model:", error);
+      return { success: false, error: "Failed to save audio-only model" };
+    }
+  }, "set-audio-only-model"));
+
+  ipcMain.handle("get-audio-screenshot-model", createSafeIpcHandler(async () => {
+    try {
+      const model = (await getStoreValue("audio-screenshot-model")) || "gemini-2.5-flash";
+      return { success: true, data: { model } };
+    } catch (error: any) {
+      console.error("Error getting audio-screenshot model:", error);
+      return { success: false, error: "Failed to get audio-screenshot model" };
+    }
+  }, "get-audio-screenshot-model"));
+
+  ipcMain.handle("set-audio-screenshot-model", createSafeIpcHandler(async (
+    _event: any,
+    model: string
+  ) => {
+    try {
+      if (!model || typeof model !== "string") {
+        return { success: false, error: "Invalid model provided" };
+      }
+      
+      const success = await setStoreValue("audio-screenshot-model", model.trim());
+      if (!success) {
+        return { success: false, error: "Failed to save audio-screenshot model" };
+      }
+      console.log(`Audio-screenshot model set to: ${model.trim()}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting audio-screenshot model:", error);
+      return { success: false, error: "Failed to save audio-screenshot model" };
+    }
+  }, "set-audio-screenshot-model"));
+
+  // ============================================================================
+  // Whisper Model Handlers
+  // ============================================================================
+  ipcMain.handle("get-whisper-model-path", createSafeIpcHandler(async () => {
+    try {
+      const modelPath = await getStoreValue("whisper-model-path");
+      return { success: true, data: { modelPath: modelPath || null } };
+    } catch (error: any) {
+      console.error("Error getting whisper model path:", error);
+      return { success: false, error: "Failed to get whisper model path" };
+    }
+  }, "get-whisper-model-path"));
+
+  ipcMain.handle("set-whisper-model-path", createSafeIpcHandler(async (
+    _event: any,
+    modelPath: string
+  ) => {
+    try {
+      if (!modelPath || typeof modelPath !== "string") {
+        return { success: false, error: "Invalid model path provided" };
+      }
+      
+      const success = await setStoreValue("whisper-model-path", modelPath.trim());
+      if (!success) {
+        return { success: false, error: "Failed to save whisper model path" };
+      }
+      console.log(`Whisper model path set to: ${modelPath.trim()}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting whisper model path:", error);
+      return { success: false, error: "Failed to save whisper model path" };
+    }
+  }, "set-whisper-model-path"));
+
+  ipcMain.handle("get-default-whisper-model-path", createSafeIpcHandler(async () => {
+    try {
+      const { SystemAudioHelper } = await import("./SystemAudioHelper");
+      const defaultPath = SystemAudioHelper.getDefaultModelPath();
+      return { success: true, data: { modelPath: defaultPath } };
+    } catch (error: any) {
+      console.error("Error getting default whisper model path:", error);
+      return { success: false, error: "Failed to get default whisper model path" };
+    }
+  }, "get-default-whisper-model-path"));
+
+  // ============================================================================
   // Auto Update Handlers
   // ============================================================================
   ipcMain.handle("check-for-auto-update", createSafeIpcHandler(async () => {

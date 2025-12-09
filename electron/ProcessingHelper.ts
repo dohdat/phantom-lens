@@ -500,7 +500,7 @@ export class ProcessingHelper {
 
     try {
       const apiKey = process.env.API_KEY;
-      const model = await this.deps.getConfiguredModel();
+      const model = await this.deps.getAudioOnlyModel();
 
       if (!apiKey) {
         throw new Error("API key not found. Please configure it in settings.");
@@ -643,7 +643,7 @@ export class ProcessingHelper {
 
     try {
       const apiKey = process.env.API_KEY;
-      const model = await this.deps.getConfiguredModel();
+      const model = await this.deps.getAudioScreenshotModel();
 
       if (!apiKey) {
         throw new Error("API key not found. Please configure it in settings.");
