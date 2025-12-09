@@ -13,3 +13,8 @@ scripts/
 scripts/manual-notarize.js
 .copilot/
 .build/
+
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
