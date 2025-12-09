@@ -133,7 +133,7 @@ describe('ScreenCaptureHelper', () => {
       const result = await screenCaptureHelper.startScreenCaptureProtection(mockWindow);
 
       expect(result).toBe(false);
-    });
+    }, 10000);
 
     it('should set executable permissions on helper binary', async () => {
       setTimeout(() => {
@@ -165,7 +165,7 @@ describe('ScreenCaptureHelper', () => {
 
       expect(result).toBe(false);
       expect(screenCaptureHelper.isRunning()).toBe(false);
-    });
+    }, 10000);
   });
 
   describe('Stop Protection', () => {
@@ -208,7 +208,7 @@ describe('ScreenCaptureHelper', () => {
       await screenCaptureHelper.stopScreenCaptureProtection();
 
       expect((mockProcess as any).kill).toHaveBeenCalledWith('SIGTERM');
-    });
+    }, 10000);
 
     it('should do nothing if not running', async () => {
       await screenCaptureHelper.stopScreenCaptureProtection();

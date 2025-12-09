@@ -51,7 +51,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Register Shortcuts', () => {
     it('should register all shortcuts', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       expect(globalShortcut.register).toHaveBeenCalledWith(
         'CommandOrControl+Enter',
@@ -72,13 +72,13 @@ describe('ShortcutsHelper', () => {
         throw new Error('Registration failed');
       });
 
-      expect(() => shortcutsHelper.register()).not.toThrow();
+      expect(() => shortcutsHelper.registerAppShortcuts()).not.toThrow();
     });
 
     it('should not register duplicate shortcuts', () => {
       (globalShortcut.isRegistered as jest.Mock).mockReturnValue(true);
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       // Should check if registered before attempting
       expect(globalShortcut.isRegistered).toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Stealth Screenshot (Cmd+Enter)', () => {
     it('should take screenshot and process in stealth mode', async () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       // Find the Cmd+Enter handler
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
@@ -101,7 +101,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should not show window in stealth mode', async () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdEnterCall = calls.find(call => call[0] === 'CommandOrControl+Enter');
@@ -115,7 +115,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Reset (Cmd+R)', () => {
     it('should cancel requests and reset view', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdRCall = calls.find(call => call[0] === 'CommandOrControl+R');
@@ -133,7 +133,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Window Movement', () => {
     it('should move window left (Cmd+Left)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdLeftCall = calls.find(call => call[0] === 'CommandOrControl+Left');
@@ -145,7 +145,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should move window right (Cmd+Right)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdRightCall = calls.find(call => call[0] === 'CommandOrControl+Right');
@@ -157,7 +157,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should move window up (Cmd+Up)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdUpCall = calls.find(call => call[0] === 'CommandOrControl+Up');
@@ -169,7 +169,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should move window down (Cmd+Down)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdDownCall = calls.find(call => call[0] === 'CommandOrControl+Down');
@@ -183,7 +183,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Emergency Recovery (Cmd+Shift+R)', () => {
     it('should recover window visibility', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const emergencyCall = calls.find(call => call[0] === 'CommandOrControl+Shift+R');
@@ -200,7 +200,7 @@ describe('ShortcutsHelper', () => {
     it('should reset window size if too small', () => {
       mockWindow.getBounds.mockReturnValue({ x: 0, y: 0, width: 50, height: 50 });
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const emergencyCall = calls.find(call => call[0] === 'CommandOrControl+Shift+R');
@@ -221,7 +221,7 @@ describe('ShortcutsHelper', () => {
       mockDeps.getMainWindow.mockReturnValue(null);
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const emergencyCall = calls.find(call => call[0] === 'CommandOrControl+Shift+R');
@@ -239,7 +239,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Scrolling', () => {
     it('should scroll response up (Alt+Up)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const altUpCall = calls.find(call => call[0] === 'Alt+Up');
@@ -251,7 +251,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should scroll response down (Alt+Down)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const altDownCall = calls.find(call => call[0] === 'Alt+Down');
@@ -263,7 +263,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should scroll code block left (Alt+Left)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const altLeftCall = calls.find(call => call[0] === 'Alt+Left');
@@ -275,7 +275,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should scroll code block right (Alt+Right)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const altRightCall = calls.find(call => call[0] === 'Alt+Right');
@@ -289,7 +289,7 @@ describe('ShortcutsHelper', () => {
 
   describe('History Navigation', () => {
     it('should navigate to previous history (Cmd+Shift+Up)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const prevCall = calls.find(call => call[0] === 'CommandOrControl+Shift+Up');
@@ -301,7 +301,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should navigate to next history (Cmd+Shift+Down)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const nextCall = calls.find(call => call[0] === 'CommandOrControl+Shift+Down');
@@ -315,7 +315,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Settings', () => {
     it('should open settings (Cmd+,)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const settingsCall = calls.find(call => call[0] === 'CommandOrControl+,');
@@ -327,7 +327,7 @@ describe('ShortcutsHelper', () => {
     });
 
     it('should unlock interactive settings (Cmd+Shift+,)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const unlockCall = calls.find(call => call[0] === 'CommandOrControl+Shift+,');
@@ -355,7 +355,7 @@ describe('ShortcutsHelper', () => {
         writable: true,
       });
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const audioCall = calls.find(call => call[0] === 'CommandOrControl+Shift+A');
@@ -375,7 +375,7 @@ describe('ShortcutsHelper', () => {
         writable: true,
       });
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const audioScreenCall = calls.find(call => call[0] === 'CommandOrControl+Shift+S');
@@ -397,7 +397,7 @@ describe('ShortcutsHelper', () => {
 
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const audioCall = calls.find(call => call[0] === 'CommandOrControl+Shift+A');
@@ -415,7 +415,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Transparency Toggle', () => {
     it('should toggle transparency (Cmd+Shift+V)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const transparencyCall = calls.find(call => call[0] === 'CommandOrControl+Shift+V');
@@ -429,7 +429,7 @@ describe('ShortcutsHelper', () => {
 
   describe('Update Download', () => {
     it('should open update download (Cmd+Shift+U)', () => {
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const updateCall = calls.find(call => call[0] === 'CommandOrControl+Shift+U');
@@ -443,8 +443,8 @@ describe('ShortcutsHelper', () => {
 
   describe('Unregister Shortcuts', () => {
     it('should unregister all shortcuts', () => {
-      shortcutsHelper.register();
-      shortcutsHelper.unregister();
+      shortcutsHelper.registerAppShortcuts();
+      shortcutsHelper.unregisterAppShortcuts();
 
       expect(globalShortcut.unregisterAll).toHaveBeenCalled();
     });
@@ -454,7 +454,7 @@ describe('ShortcutsHelper', () => {
         throw new Error('Unregister failed');
       });
 
-      expect(() => shortcutsHelper.unregister()).not.toThrow();
+      expect(() => shortcutsHelper.unregisterAppShortcuts()).not.toThrow();
     });
   });
 
@@ -462,7 +462,7 @@ describe('ShortcutsHelper', () => {
     it('should handle window destroyed state', () => {
       mockWindow.isDestroyed.mockReturnValue(true);
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdRCall = calls.find(call => call[0] === 'CommandOrControl+R');
@@ -475,7 +475,7 @@ describe('ShortcutsHelper', () => {
     it('should handle missing processing helper', async () => {
       mockDeps.processingHelper = undefined;
 
-      shortcutsHelper.register();
+      shortcutsHelper.registerAppShortcuts();
 
       const calls = (globalShortcut.register as jest.Mock).mock.calls;
       const cmdEnterCall = calls.find(call => call[0] === 'CommandOrControl+Enter');

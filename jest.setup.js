@@ -71,3 +71,6 @@ jest.mock('https', () => ({
 
 // Set environment variable
 process.env.NODE_ENV = 'test';
+
+// Mock process.resourcesPath
+process.resourcesPath = '/mock/resources/path';

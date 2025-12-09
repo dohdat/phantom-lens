@@ -218,7 +218,7 @@ export class ShortcutsHelper {
     });
   }
 
-  private unregisterAppShortcuts(): void {
+  public unregisterAppShortcuts(): void {
     Object.keys(this.shortcuts).forEach((key) => {
       try {
         globalShortcut.unregister(key);
