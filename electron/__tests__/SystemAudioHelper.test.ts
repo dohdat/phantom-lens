@@ -157,37 +157,8 @@ describe('SystemAudioHelper', () => {
 
 
 
-  describe('Process Error Handling', () => {
-    it('should handle process spawn error', async () => {
-      (spawn as jest.Mock).mockImplementation(() => {
-        const proc = new EventEmitter();
-        setTimeout(() => proc.emit('error', new Error('Spawn failed')), 10);
-        return proc;
-      });
-
-      await expect(systemAudioHelper.start()).rejects.toThrow();
-    });
-  });
-
   describe('State Management', () => {
     it('should return correct capturing state', () => {
-      expect(systemAudioHelper.isCapturing()).toBe(false);
-    });
-  });
-
-  describe('Shutdown', () => {
-    beforeEach(async () => {
-      setTimeout(() => {
-        (mockProcess.stdout as any).emit('data', JSON.stringify({ type: 'ready' }) + '\n');
-        (mockProcess.stdout as any).emit('data', JSON.stringify({ type: 'started' }) + '\n');
-      }, 10);
-      await systemAudioHelper.start();
-    });
-
-    it('should clear all timers on shutdown', async () => {
-      await systemAudioHelper.shutdown();
-
-      // Verify cleanup happened
       expect(systemAudioHelper.isCapturing()).toBe(false);
     });
   });

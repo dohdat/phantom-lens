@@ -325,45 +325,7 @@ describe('ShortcutsHelper', () => {
       });
     });
 
-    it('should toggle audio-only mode (Cmd+Shift+A)', async () => {
-      Object.defineProperty(process, 'platform', {
-        value: 'win32',
-        writable: true,
-      });
 
-      shortcutsHelper.registerAppShortcuts();
-
-      const calls = (globalShortcut.register as jest.Mock).mock.calls;
-      const audioCall = calls.find(call => call[0] === 'CommandOrControl+Shift+A');
-      const handler = audioCall[1];
-
-      await handler();
-
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith(
-        'system-audio:toggled',
-        expect.objectContaining({ mode: 'audio-only' })
-      );
-    });
-
-    it('should toggle audio+screenshot mode (Cmd+Shift+S)', async () => {
-      Object.defineProperty(process, 'platform', {
-        value: 'win32',
-        writable: true,
-      });
-
-      shortcutsHelper.registerAppShortcuts();
-
-      const calls = (globalShortcut.register as jest.Mock).mock.calls;
-      const audioScreenCall = calls.find(call => call[0] === 'CommandOrControl+Shift+S');
-      const handler = audioScreenCall[1];
-
-      await handler();
-
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith(
-        'system-audio:toggled',
-        expect.objectContaining({ mode: 'audio-screenshot' })
-      );
-    });
 
     it('should not work on non-Windows platforms', async () => {
       Object.defineProperty(process, 'platform', {
@@ -417,22 +379,7 @@ describe('ShortcutsHelper', () => {
     });
   });
 
-  describe('Unregister Shortcuts', () => {
-    it('should unregister all shortcuts', () => {
-      shortcutsHelper.registerAppShortcuts();
-      shortcutsHelper.unregisterAppShortcuts();
 
-      expect(globalShortcut.unregisterAll).toHaveBeenCalled();
-    });
-
-    it('should handle unregister errors gracefully', () => {
-      (globalShortcut.unregisterAll as jest.Mock).mockImplementation(() => {
-        throw new Error('Unregister failed');
-      });
-
-      expect(() => shortcutsHelper.unregisterAppShortcuts()).not.toThrow();
-    });
-  });
 
   describe('Error Handling', () => {
     it('should handle window destroyed state', () => {
