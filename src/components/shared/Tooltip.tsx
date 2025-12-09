@@ -68,7 +68,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const defaultModel = MODEL_OPTIONS.find(m => m.default)?.id || "gemini-2.5-flash";
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const apiKeyInputRef = useRef<HTMLInputElement>(null);
-  const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const modelSelectRef = useRef<HTMLInputElement>(null);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
   const [isInteractive, setIsInteractive] = useState(false);
   const isTransparent = useTransparencyMode();
@@ -954,7 +954,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   </div>
                   <div>
                   <label className="block text-xs text-white/70 mb-1 text-center">Model</label>
-                  <select
+                  <input
+                      type="text"
                       ref={modelSelectRef}
                       value={selectedModel}
                     onChange={(e) => {
@@ -963,19 +964,14 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                    placeholder="gemini-2.5-flash"
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
                         ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
                         : 'cursor-default'
                     }`}
                     style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                    >
-                          {MODEL_OPTIONS.map((model, index) => (
-                      <option key={model.id} value={model.id} className="bg-gray-800 text-white">
-                                  {index + 1}. {model.name}
-                      </option>
-                    ))}
-                  </select>
+                    />
                         </div>
                 <button
                   ref={saveButtonRef}
@@ -1176,7 +1172,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs text-white/70 mb-1 text-center">Audio Only <span className="text-white/50">(Ctrl+Shift+A)</span></label>
-                  <select
+                  <input
+                    type="text"
                     value={audioOnlyModel}
                     onChange={(e) => {
                       if (!isInteractive) return;
@@ -1184,23 +1181,19 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                    placeholder="gemini-2.5-flash"
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
                         ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
                         : 'cursor-default'
                     }`}
                     style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                  >
-                    {MODEL_OPTIONS.map((model, index) => (
-                      <option key={model.id} value={model.id} className="bg-gray-800 text-white">
-                        {index + 1}. {model.name}
-                      </option>
-                    ))}
-                  </select>
+                    />
                 </div>
                 <div>
                   <label className="block text-xs text-white/70 mb-1 text-center">Audio + Screenshot <span className="text-white/50">(Ctrl+Shift+S)</span></label>
-                  <select
+                  <input
+                    type="text"
                     value={audioScreenshotModel}
                     onChange={(e) => {
                       if (!isInteractive) return;
@@ -1208,19 +1201,14 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                    placeholder="gemini-2.5-flash"
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
                         ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
                         : 'cursor-default'
                     }`}
                     style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                  >
-                    {MODEL_OPTIONS.map((model, index) => (
-                      <option key={model.id} value={model.id} className="bg-gray-800 text-white">
-                        {index + 1}. {model.name}
-                      </option>
-                    ))}
-                  </select>
+                    />
                 </div>
                 <button
                   onClick={async () => {
