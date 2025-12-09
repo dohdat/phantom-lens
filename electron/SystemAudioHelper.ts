@@ -99,7 +99,7 @@ export class SystemAudioHelper {
    */
   public static getDefaultModelPath(): string {
     const isDev = process.env.NODE_ENV === "development";
-    const modelName = "ggml-small.en.q5_1.bin";
+    const modelName = "ggml-small.en-q5_1.bin";
     
     if (isDev) {
       // In development, look in a local models directory
