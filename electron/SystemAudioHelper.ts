@@ -253,7 +253,7 @@ export class SystemAudioHelper {
     if (!fs.existsSync(exePath)) {
       return {
         valid: false,
-        error: `phantom-audio executable not found at: ${execPath}`,
+        error: `phantom-audio executable not found at: ${exePath}`,
       };
     }
 
