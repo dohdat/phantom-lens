@@ -692,11 +692,15 @@ export class ProcessingHelper {
           accumulatedText = "";
           let pendingBuffer = "";
           let lastSentLength = 0;
-          const FLUSH_INTERVAL = 80;
+          const FLUSH_INTERVAL = 200;
           let lastFlushTime = Date.now();
           
-          const isWordBoundary = (char: string): boolean => {
-            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          const isParagraphBoundary = (text: string, pos: number): boolean => {
+            // Check for double newline (paragraph break)
+            if (pos > 0 && text[pos] === '\n' && text[pos - 1] === '\n') {
+              return true;
+            }
+            return false;
           };
           
           const flushToUI = (force: boolean = false) => {
@@ -707,13 +711,15 @@ export class ProcessingHelper {
               let flushUpTo = pendingBuffer.length;
               
               if (!force) {
-                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                  if (isWordBoundary(pendingBuffer[i])) {
+                // Look for the last paragraph boundary (double newline)
+                for (let i = pendingBuffer.length - 1; i >= 1; i--) {
+                  if (isParagraphBoundary(pendingBuffer, i)) {
                     flushUpTo = i + 1;
                     break;
                   }
                 }
-                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                // If no paragraph boundary found and buffer is small, don't flush yet
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 100) {
                   return;
                 }
               }
@@ -747,17 +753,21 @@ export class ProcessingHelper {
           const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
           const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
 
-          // Stream the response with word-buffering - TEXT ONLY, no images
+          // Stream the response with paragraph-buffering - TEXT ONLY, no images
           const result = await geminiModel.generateContentStream([prompt]);
 
           accumulatedText = "";
           let pendingBuffer = "";
           let lastSentLength = 0;
-          const FLUSH_INTERVAL = 80;
+          const FLUSH_INTERVAL = 200;
           let lastFlushTime = Date.now();
           
-          const isWordBoundary = (char: string): boolean => {
-            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          const isParagraphBoundary = (text: string, pos: number): boolean => {
+            // Check for double newline (paragraph break)
+            if (pos > 0 && text[pos] === '\n' && text[pos - 1] === '\n') {
+              return true;
+            }
+            return false;
           };
           
           const flushToUI = (force: boolean = false) => {
@@ -768,13 +778,15 @@ export class ProcessingHelper {
               let flushUpTo = pendingBuffer.length;
               
               if (!force) {
-                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                  if (isWordBoundary(pendingBuffer[i])) {
+                // Look for the last paragraph boundary (double newline)
+                for (let i = pendingBuffer.length - 1; i >= 1; i--) {
+                  if (isParagraphBoundary(pendingBuffer, i)) {
                     flushUpTo = i + 1;
                     break;
                   }
                 }
-                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                // If no paragraph boundary found and buffer is small, don't flush yet
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 100) {
                   return;
                 }
               }
@@ -929,11 +941,15 @@ export class ProcessingHelper {
           accumulatedText = "";
           let pendingBuffer = "";
           let lastSentLength = 0;
-          const FLUSH_INTERVAL = 80;
+          const FLUSH_INTERVAL = 200;
           let lastFlushTime = Date.now();
           
-          const isWordBoundary = (char: string): boolean => {
-            return /[\s\n.,!?;:)\]}>"\`']/.test(char);
+          const isParagraphBoundary = (text: string, pos: number): boolean => {
+            // Check for double newline (paragraph break)
+            if (pos > 0 && text[pos] === '\n' && text[pos - 1] === '\n') {
+              return true;
+            }
+            return false;
           };
           
           const flushToUI = (force: boolean = false) => {
@@ -944,13 +960,15 @@ export class ProcessingHelper {
               let flushUpTo = pendingBuffer.length;
               
               if (!force) {
-                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                  if (isWordBoundary(pendingBuffer[i])) {
+                // Look for the last paragraph boundary (double newline)
+                for (let i = pendingBuffer.length - 1; i >= 1; i--) {
+                  if (isParagraphBoundary(pendingBuffer, i)) {
                     flushUpTo = i + 1;
                     break;
                   }
                 }
-                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                // If no paragraph boundary found and buffer is small, don't flush yet
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 100) {
                   return;
                 }
               }
@@ -1017,11 +1035,15 @@ export class ProcessingHelper {
           accumulatedText = "";
           let pendingBuffer = "";
           let lastSentLength = 0;
-          const FLUSH_INTERVAL = 80;
+          const FLUSH_INTERVAL = 200;
           let lastFlushTime = Date.now();
           
-          const isWordBoundary = (char: string): boolean => {
-            return /[\s\n.,!?;:)\]}>"\`']/.test(char);
+          const isParagraphBoundary = (text: string, pos: number): boolean => {
+            // Check for double newline (paragraph break)
+            if (pos > 0 && text[pos] === '\n' && text[pos - 1] === '\n') {
+              return true;
+            }
+            return false;
           };
           
           const flushToUI = (force: boolean = false) => {
@@ -1032,13 +1054,15 @@ export class ProcessingHelper {
               let flushUpTo = pendingBuffer.length;
               
               if (!force) {
-                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                  if (isWordBoundary(pendingBuffer[i])) {
+                // Look for the last paragraph boundary (double newline)
+                for (let i = pendingBuffer.length - 1; i >= 1; i--) {
+                  if (isParagraphBoundary(pendingBuffer, i)) {
                     flushUpTo = i + 1;
                     break;
                   }
                 }
-                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                // If no paragraph boundary found and buffer is small, don't flush yet
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 100) {
                   return;
                 }
               }
@@ -1114,17 +1138,21 @@ export class ProcessingHelper {
           console.log(`[AudioWithScreenshot] Added ${imageParts.length} optimized screenshots to request`);
         }
 
-        // Stream the response with word-buffering - uses audio prompt directly with images
+        // Stream the response with paragraph-buffering - uses audio prompt directly with images
         const result = await geminiModel.generateContentStream(contentParts);
 
         accumulatedText = "";
         let pendingBuffer = "";
         let lastSentLength = 0;
-        const FLUSH_INTERVAL = 80;
+        const FLUSH_INTERVAL = 200;
         let lastFlushTime = Date.now();
         
-        const isWordBoundary = (char: string): boolean => {
-          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        const isParagraphBoundary = (text: string, pos: number): boolean => {
+          // Check for double newline (paragraph break)
+          if (pos > 0 && text[pos] === '\n' && text[pos - 1] === '\n') {
+            return true;
+          }
+          return false;
         };
         
         const flushToUI = (force: boolean = false) => {
@@ -1135,13 +1163,15 @@ export class ProcessingHelper {
             let flushUpTo = pendingBuffer.length;
             
             if (!force) {
-              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                if (isWordBoundary(pendingBuffer[i])) {
+              // Look for the last paragraph boundary (double newline)
+              for (let i = pendingBuffer.length - 1; i >= 1; i--) {
+                if (isParagraphBoundary(pendingBuffer, i)) {
                   flushUpTo = i + 1;
                   break;
                 }
               }
-              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+              // If no paragraph boundary found and buffer is small, don't flush yet
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 100) {
                 return;
               }
             }

@@ -129,7 +129,7 @@ export default function Response({ setView }: ResponseProps) {
     // Store the latest chunk
     pendingChunkRef.current = chunk;
     
-    // Throttle updates to every 50ms to prevent window fluctuations
+    // Throttle updates to every 100ms to prevent window fluctuations (increased for paragraph streaming)
     if (chunkUpdateTimeoutRef.current) {
       return; // Already scheduled
     }
@@ -141,7 +141,7 @@ export default function Response({ setView }: ResponseProps) {
         pendingChunkRef.current = null;
       }
       chunkUpdateTimeoutRef.current = null;
-    }, 50);
+    }, 100);
   }, []);
 
   // Single function to update response data
