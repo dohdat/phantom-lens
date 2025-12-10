@@ -117,9 +117,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   // Audio prompt state (for Meeting Assistant)
   const [audioPrompt, setAudioPrompt] = useState("");
   const [showAudioPromptEditor, setShowAudioPromptEditor] = useState(false);
-  // Audio route model state
-  const [audioOnlyModel, setAudioOnlyModel] = useState("gemini-2.5-flash");
-  const [audioScreenshotModel, setAudioScreenshotModel] = useState("gemini-2.5-flash");
+  // Vision model state (for two-step processing)
+  const [visionModel, setVisionModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct");
   // Whisper model state
   const [whisperModelPath, setWhisperModelPath] = useState("");
   // Update state - persist once shown
@@ -237,23 +236,14 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         console.warn("Failed to load audio prompt:", e);
       }
 
-      // Load audio route models
+      // Load vision and text models
       try {
-        const audioOnlyModelResponse = await window.electronAPI.getAudioOnlyModel?.();
-        if (audioOnlyModelResponse?.success && audioOnlyModelResponse.data?.model) {
-          setAudioOnlyModel(audioOnlyModelResponse.data.model);
+        const visionModelResponse = await window.electronAPI.getVisionModel?.();
+        if (visionModelResponse?.success && visionModelResponse.data?.model) {
+          setVisionModel(visionModelResponse.data.model);
         }
       } catch (e) {
-        console.warn("Failed to load audio-only model:", e);
-      }
-
-      try {
-        const audioScreenshotModelResponse = await window.electronAPI.getAudioScreenshotModel?.();
-        if (audioScreenshotModelResponse?.success && audioScreenshotModelResponse.data?.model) {
-          setAudioScreenshotModel(audioScreenshotModelResponse.data.model);
-        }
-      } catch (e) {
-        console.warn("Failed to load audio-screenshot model:", e);
+        console.warn("Failed to load vision model:", e);
       }
 
       // Load Whisper model path
@@ -1030,7 +1020,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     />
                   </div>
                   <div>
-                  <label className="block text-xs text-white/70 mb-1 text-center">Model</label>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Response Model</label>
                   <input
                       type="text"
                       ref={modelSelectRef}
@@ -1250,45 +1240,25 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
               )}
             </div>
 
-            {/* Audio Route Models */}
+            {/* Vision Model Configuration */}
             <div className="mb-4">
-              <h3 className="text-sm font-medium text-white mb-2 text-center">Audio Route Models</h3>
+              <h3 className="text-sm font-medium text-white mb-2 text-center">Vision Model</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-white/70 mb-1 text-center">Audio Only <span className="text-white/50">(Ctrl+Shift+A)</span></label>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Vision Model <span className="text-white/50">(for screenshots)</span></label>
                   <input
                     type="text"
-                    value={audioOnlyModel}
+                    value={visionModel}
                     onChange={(e) => {
                       if (!isInteractive) return;
-                      setAudioOnlyModel(e.target.value);
+                      setVisionModel(e.target.value);
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    placeholder="gemini-2.5-flash"
+                    placeholder="meta-llama/llama-4-scout-17b-16e-instruct"
                     className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
-                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
-                        : 'cursor-default'
-                    }`}
-                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                    />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/70 mb-1 text-center">Audio + Screenshot <span className="text-white/50">(Ctrl+Shift+S)</span></label>
-                  <input
-                    type="text"
-                    value={audioScreenshotModel}
-                    onChange={(e) => {
-                      if (!isInteractive) return;
-                      setAudioScreenshotModel(e.target.value);
-                    }}
-                    disabled={!isInteractive}
-                    tabIndex={isInteractive ? 0 : -1}
-                    placeholder="gemini-2.5-flash"
-                    className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
-                      isInteractive 
-                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-green-500/20' 
                         : 'cursor-default'
                     }`}
                     style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
@@ -1298,22 +1268,21 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   onClick={async () => {
                     if (!isInteractive) return;
                     try {
-                      await window.electronAPI.setAudioOnlyModel?.(audioOnlyModel);
-                      await window.electronAPI.setAudioScreenshotModel?.(audioScreenshotModel);
-                      console.log("Audio route models saved");
+                      await window.electronAPI.setVisionModel?.(visionModel);
+                      console.log("Vision model saved");
                     } catch (e) {
-                      console.error("Failed to save audio route models:", e);
+                      console.error("Failed to save vision model:", e);
                     }
                   }}
                   disabled={!isInteractive}
                   tabIndex={isInteractive ? 0 : -1}
-                  className={`w-full px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                  className={`w-full px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-green-500/20 text-green-200 border border-green-500/30 hover:bg-green-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
                   style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
                 >
-                  Save Audio Models
+                  Save Vision Model
                 </button>
                 <p className="text-[10px] text-white/50 leading-relaxed text-center">
-                  Choose which AI model to use for audio-only and audio+screenshot routes.
+                  Used for screenshot analysis in two-step processing. The Response Model (above) generates the final answer.
                 </p>
               </div>
             </div>

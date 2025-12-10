@@ -154,6 +154,24 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  getVisionModel: () => Promise<{
+    success: boolean;
+    data?: { model: string };
+    error?: string;
+  }>;
+  setVisionModel: (model: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getTextModel: () => Promise<{
+    success: boolean;
+    data?: { model: string };
+    error?: string;
+  }>;
+  setTextModel: (model: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   // Whisper Model
   getWhisperModelPath: () => Promise<{
     success: boolean;
@@ -486,6 +504,11 @@ const electronAPI = {
   setAudioOnlyModel: (model: string) => ipcRenderer.invoke("set-audio-only-model", model),
   getAudioScreenshotModel: () => ipcRenderer.invoke("get-audio-screenshot-model"),
   setAudioScreenshotModel: (model: string) => ipcRenderer.invoke("set-audio-screenshot-model", model),
+  // Vision and Text Models (for two-step processing)
+  getVisionModel: () => ipcRenderer.invoke("get-vision-model"),
+  setVisionModel: (model: string) => ipcRenderer.invoke("set-vision-model", model),
+  getTextModel: () => ipcRenderer.invoke("get-text-model"),
+  setTextModel: (model: string) => ipcRenderer.invoke("set-text-model", model),
   // Whisper Model
   getWhisperModelPath: () => ipcRenderer.invoke("get-whisper-model-path"),
   setWhisperModelPath: (modelPath: string) => ipcRenderer.invoke("set-whisper-model-path", modelPath),

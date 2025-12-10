@@ -1094,6 +1094,45 @@ Your response:`;
     }
   }, "set-audio-screenshot-model"));
 
+  ipcMain.handle("get-vision-model", createSafeIpcHandler(async () => {
+    try {
+      const model = (await getStoreValue("vision-model")) || "meta-llama/llama-4-scout-17b-16e-instruct";
+      return { success: true, data: { model } };
+    } catch (error: any) {
+      console.error("Error getting vision model:", error);
+      return { success: false, error: "Failed to get vision model" };
+    }
+  }, "get-vision-model"));
+
+  ipcMain.handle("set-vision-model", createSafeIpcHandler(async (
+    _event: any,
+    model: string
+  ) => {
+    try {
+      if (!model || typeof model !== "string") {
+        return { success: false, error: "Invalid model provided" };
+      }
+      
+      const success = await setStoreValue("vision-model", model.trim());
+      if (!success) {
+        return { success: false, error: "Failed to save vision model" };
+      }
+      console.log(`Vision model set to: ${model.trim()}`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error setting vision model:", error);
+      return { success: false, error: "Failed to save vision model" };
+    }
+  }, "set-vision-model"));
+
+  // Text model now uses api-model (Response Model) - no separate handlers needed
+
+    } catch (error: any) {
+      console.error("Error setting audio-screenshot model:", error);
+      return { success: false, error: "Failed to save audio-screenshot model" };
+    }
+  }, "set-audio-screenshot-model"));
+
   // ============================================================================
   // Whisper Model Handlers
   // ============================================================================

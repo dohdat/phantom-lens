@@ -240,6 +240,57 @@ export class ProcessingHelper {
     return fullText;
   }
 
+  /**
+   * Analyze screenshots with the vision model (Llama) and return descriptions
+   * This is used for two-step processing: vision analysis -> text generation
+   */
+  private async analyzeScreenshotsWithVision(
+    base64Images: string[],
+    apiKey: string,
+    visionModel: string,
+    signal: AbortSignal,
+    userPrompt?: string
+  ): Promise<string> {
+    console.log(`[VisionAnalysis] Analyzing ${base64Images.length} screenshot(s) with ${visionModel}`);
+    
+    // Build analysis prompt
+    const analysisPromptLines = [
+      "# Screenshot Analysis Task",
+      "",
+      "Analyze the provided screenshot(s) and describe what you see in detail.",
+      "Focus on:",
+      "- Text content visible on screen",
+      "- UI elements and their states",
+      "- Important information being displayed",
+      "- Any notable patterns or data",
+      "",
+      "Be comprehensive but concise. Your analysis will be used by another AI to generate a response.",
+    ];
+
+    if (userPrompt && userPrompt.trim().length > 0) {
+      analysisPromptLines.push(
+        "",
+        "## Additional Context",
+        userPrompt.trim()
+      );
+    }
+
+    const analysisPrompt = analysisPromptLines.join("\n");
+
+    // Use Groq API to analyze screenshots
+    const description = await this.callGroqAPI(
+      analysisPrompt,
+      apiKey,
+      visionModel,
+      signal,
+      undefined, // No streaming callback for analysis
+      base64Images
+    );
+
+    console.log(`[VisionAnalysis] Analysis completed, ${description.length} characters`);
+    return description;
+  }
+
   public async processScreenshots(): Promise<void> {
     if (this.isCurrentlyProcessing) {
       console.log("Processing already in progress. Skipping duplicate call.");
@@ -828,11 +879,6 @@ export class ProcessingHelper {
         throw new Error("API key not found. Please configure it in settings.");
       }
 
-      // Check if using Groq with a non-vision model
-      if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or use audio-only mode.`);
-      }
-
       // Get screenshots from queue
       const screenshotQueue = this.screenshotHelper.getScreenshotQueue();
       if (screenshotQueue.length === 0) {
@@ -846,6 +892,117 @@ export class ProcessingHelper {
           return this.optimizeImage(buffer);
         })
       );
+
+      // Check if we should use two-step processing (vision -> text)
+      const visionModel = await this.deps.getVisionModel();
+      const textModel = await this.deps.getTextModel();
+      const useTwoStepProcessing = provider === "groq" && 
+                                    optimizedScreenshots.length > 0 &&
+                                    visionModel && textModel && 
+                                    visionModel !== textModel &&
+                                    !this.isGroqVisionModel(model);
+
+      if (useTwoStepProcessing) {
+        // TWO-STEP PROCESSING: Vision model analyzes screenshots, text model generates response
+        console.log(`[AudioScreenshot-TwoStep] Using vision: ${visionModel}, text: ${textModel}`);
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (signal.aborted) throw new Error("Request aborted");
+
+        // Step 1: Analyze screenshots with vision model
+        const base64Images = optimizedScreenshots.map(s => s.data);
+        const screenshotDescription = await this.analyzeScreenshotsWithVision(
+          base64Images,
+          apiKey,
+          visionModel,
+          signal
+        );
+
+        if (signal.aborted) throw new Error("Request aborted");
+
+        // Step 2: Combine audio transcript with screenshot analysis for text model
+        const combinedPrompt = `${prompt}\n\n## Screenshot Analysis\nThe following describes what was visible on screen:\n\n${screenshotDescription}`;
+
+        const abortHandler = () => {};
+        signal.addEventListener("abort", abortHandler);
+
+        try {
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"\`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
+            
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
+            }
+          };
+
+          // Call text model without images
+          await this.callGroqAPI(combinedPrompt, apiKey, textModel, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          });
+          
+          flushToUI(true);
+          responseText = accumulatedText;
+
+          this.screenshotHelper.clearExtraScreenshotQueue();
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+              const main = require("./main");
+              main.saveResponseToHistory?.(responseText);
+            } catch {}
+            mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+          }
+
+          return { success: true, data: responseText };
+        } finally {
+          try {
+            signal.removeEventListener("abort", abortHandler);
+          } catch (e) {}
+        }
+      }
+
+      // Check if using Groq with a non-vision model (without two-step)
+      if (provider === "groq" && !this.isGroqVisionModel(model)) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
+      }
 
       if (provider === "groq") {
         // Use Groq API for audio with screenshots
@@ -1167,9 +1324,146 @@ export class ProcessingHelper {
     const provider = process.env.API_PROVIDER || "gemini";
     
     try {
-      // Check if using Groq with a non-vision model
+      // Check if we should use two-step processing (vision -> text)
+      const visionModel = await this.deps.getVisionModel();
+      const textModel = await this.deps.getTextModel();
+      const useTwoStepProcessing = provider === "groq" && 
+                                    visionModel && textModel && 
+                                    visionModel !== textModel &&
+                                    !this.isGroqVisionModel(model);
+
+      if (useTwoStepProcessing) {
+        // TWO-STEP PROCESSING: Vision model analyzes, text model generates response
+        console.log(`[TwoStep] Using vision model: ${visionModel}, text model: ${textModel}`);
+        
+        const mainWindow = this.deps.getMainWindow();
+        
+        // Step 1: Analyze screenshots with vision model
+        let userPrompt: string | null = null;
+        try {
+          userPrompt = this.deps.getUserPrompt?.();
+          if (userPrompt && userPrompt.trim().length > 0) {
+            this.deps.clearUserPrompt?.();
+          }
+        } catch {}
+
+        const screenshotDescription = await this.analyzeScreenshotsWithVision(
+          base64Images,
+          apiKey,
+          visionModel,
+          signal,
+          userPrompt || undefined
+        );
+
+        if (signal.aborted) throw new Error("Request aborted");
+
+        // Step 2: Generate response with text model using the description
+        console.log(`[TwoStep] Generating response with text model`);
+
+        // Build prompt for text model
+        let customPrompt: string | null = null;
+        try {
+          customPrompt = await this.deps.getSystemPrompt();
+        } catch (e) {
+          console.warn("Failed to get custom system prompt:", e);
+        }
+
+        let promptLines: string[];
+        if (customPrompt && customPrompt.trim().length > 0) {
+          promptLines = customPrompt.split('\n');
+        } else {
+          promptLines = this.getDefaultPromptLines();
+        }
+
+        // Add screenshot analysis to the prompt
+        promptLines.push(
+          "",
+          "## Screenshot Analysis",
+          "The following is a description of screenshot(s) that were captured:",
+          "",
+          screenshotDescription,
+          ""
+        );
+
+        const finalPrompt = promptLines.join("\n");
+
+        const abortHandler = () => {};
+        signal.addEventListener("abort", abortHandler);
+
+        try {
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
+            
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
+            }
+          };
+
+          // Call text model without images
+          await this.callGroqAPI(finalPrompt, apiKey, textModel, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          });
+          
+          flushToUI(true);
+          responseText = accumulatedText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+              const main = require("./main");
+              main.saveResponseToHistory?.(responseText);
+            } catch {}
+            mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+          }
+
+          return { success: true, data: responseText };
+        } finally {
+          try {
+            signal.removeEventListener("abort", abortHandler);
+          } catch (e) {}
+        }
+      }
+
+      // Check if using Groq with a non-vision model (without two-step)
       if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or switch to Gemini.`);
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
       }
 
       if (provider === "groq") {
@@ -1536,11 +1830,6 @@ export class ProcessingHelper {
         throw new Error("API key not found. Please configure it in settings.");
       }
 
-      // Check if using Groq with a non-vision model
-      if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or switch to Gemini.`);
-      }
-
       const base64Images = imageDataList.map(
         (data) => data // Keep the base64 string as is
       );
@@ -1554,6 +1843,90 @@ export class ProcessingHelper {
         // Check if it's a valid base64 string
         if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
           return false;
+        }
+        
+        // Check minimum length (base64 should be reasonably long)
+        if (data.length < 100) {
+          return false;
+        }
+        
+        return true;
+      });
+
+      if (validBase64Images.length === 0) {
+        throw new Error("No valid screenshot data available for follow-up processing. Please try taking a new screenshot.");
+      }
+
+      // Check if we should use two-step processing (vision -> text)
+      const visionModel = await this.deps.getVisionModel();
+      const textModel = await this.deps.getTextModel();
+      const useTwoStepProcessing = provider === "groq" && 
+                                    visionModel && textModel && 
+                                    visionModel !== textModel &&
+                                    !this.isGroqVisionModel(model);
+
+      if (useTwoStepProcessing) {
+        // TWO-STEP PROCESSING for follow-up
+        console.log(`[Followup-TwoStep] Using vision: ${visionModel}, text: ${textModel}`);
+
+        // Step 1: Analyze screenshots with vision model
+        const screenshotDescription = await this.analyzeScreenshotsWithVision(
+          validBase64Images,
+          apiKey,
+          visionModel,
+          signal,
+          userPrompt
+        );
+
+        if (signal.aborted) throw new Error("Request aborted");
+
+        // Step 2: Generate response with text model
+        // Try to get custom system prompt from settings
+        let customPrompt: string | null = null;
+        try {
+          customPrompt = await this.deps.getSystemPrompt();
+        } catch (e) {
+          console.warn("Failed to get custom system prompt for follow-up:", e);
+        }
+
+        let promptLines: string[];
+        if (customPrompt && customPrompt.trim().length > 0) {
+          promptLines = customPrompt.split('\n');
+          promptLines.push(
+            ``,
+            `## Previous Response Context`,
+            `This is a follow-up to a previous response. Please consider the context and build upon it appropriately.`,
+            ``
+          );
+        } else {
+          promptLines = this.getDefaultFollowUpPromptLines();
+        }
+
+        // Add screenshot analysis
+        promptLines.push(
+          "",
+          "## Screenshot Analysis",
+          "The following describes what was visible in the screenshot(s):",
+          "",
+          screenshotDescription,
+          ""
+        );
+
+        const finalPrompt = promptLines.join("\n");
+
+        // Stream response from text model
+        return await this.streamFollowupResponse(
+          finalPrompt,
+          apiKey,
+          textModel,
+          signal
+        );
+      }
+
+      // Check if using Groq with a non-vision model (without two-step)
+      if (provider === "groq" && !this.isGroqVisionModel(model)) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
+      }
         }
         
         // Check minimum length (base64 should be reasonably long)
@@ -2005,6 +2378,104 @@ export class ProcessingHelper {
       mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.FOLLOW_UP_ERROR, error.message || "Unknown error");
     } finally {
       this.isCurrentlyProcessing = false;
+    }
+  }
+
+  /**
+   * Helper to stream response from text model (no images)
+   */
+  private async streamFollowupResponse(
+    prompt: string,
+    apiKey: string,
+    model: string,
+    signal: AbortSignal
+  ): Promise<{ success: boolean; data?: string; error?: string }> {
+    const mainWindow = this.deps.getMainWindow();
+    let accumulatedText = "";
+    let chunksSent = false;
+
+    try {
+      const abortHandler = () => {};
+      signal.addEventListener("abort", abortHandler);
+
+      try {
+        let pendingBuffer = "";
+        let lastSentLength = 0;
+        const FLUSH_INTERVAL = 80;
+        let lastFlushTime = Date.now();
+        
+        const isWordBoundary = (char: string): boolean => {
+          return /[\s\n.,!?;:)\]}>"`']/.test(char);
+        };
+        
+        const flushToUI = (force: boolean = false) => {
+          const now = Date.now();
+          const timeSinceLastFlush = now - lastFlushTime;
+          
+          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+            let flushUpTo = pendingBuffer.length;
+            
+            if (!force) {
+              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                if (isWordBoundary(pendingBuffer[i])) {
+                  flushUpTo = i + 1;
+                  break;
+                }
+              }
+              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                return;
+              }
+            }
+            
+            const toFlush = pendingBuffer.slice(0, flushUpTo);
+            accumulatedText += toFlush;
+            pendingBuffer = pendingBuffer.slice(flushUpTo);
+            
+            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+              chunksSent = true;
+              mainWindow.webContents.send(
+                this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                { response: accumulatedText }
+              );
+              lastSentLength = accumulatedText.length;
+              lastFlushTime = now;
+            }
+          }
+        };
+
+        await this.callGroqAPI(prompt, apiKey, model, signal, (chunk) => {
+          pendingBuffer += chunk;
+          flushToUI(false);
+        });
+        
+        flushToUI(true);
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            const main = require("./main");
+            main.saveResponseToHistory?.(accumulatedText);
+          } catch {}
+          mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: accumulatedText });
+        }
+
+        return { success: true, data: accumulatedText };
+      } finally {
+        try {
+          signal.removeEventListener("abort", abortHandler);
+        } catch (e) {}
+      }
+    } catch (error: any) {
+      console.error("Follow-up response error:", error);
+      
+      if (chunksSent && accumulatedText) {
+        return { success: true, data: accumulatedText };
+      }
+
+      if (error.message === "Request aborted" || error.name === "AbortError") {
+        return { success: false, error: "Follow-up canceled." };
+      }
+
+      return { success: false, error: error.message || "Unknown error" };
     }
   }
 

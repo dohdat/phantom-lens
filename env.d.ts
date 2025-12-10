@@ -131,6 +131,25 @@ interface Window {
       success: boolean;
       error?: string;
     }>;
+    // Vision and Text Models (for two-step processing)
+    getVisionModel: () => Promise<{
+      success: boolean;
+      data?: { model: string };
+      error?: string;
+    }>;
+    setVisionModel: (model: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getTextModel: () => Promise<{
+      success: boolean;
+      data?: { model: string };
+      error?: string;
+    }>;
+    setTextModel: (model: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
     // Whisper Model
     getWhisperModelPath: () => Promise<{
       success: boolean;

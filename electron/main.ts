@@ -340,6 +340,8 @@ export interface IProcessingHelperDeps {
   getConfiguredModel: () => Promise<string>;
   getAudioOnlyModel: () => Promise<string>;
   getAudioScreenshotModel: () => Promise<string>;
+  getVisionModel: () => Promise<string>;
+  getTextModel: () => Promise<string>;
   getSystemPrompt: () => Promise<string | null>;
   setHasFollowedUp: (hasFollowedUp: boolean) => void;
   clearQueues: () => void;
@@ -898,6 +900,8 @@ function initializeHelpers() {
     getConfiguredModel,
     getAudioOnlyModel,
     getAudioScreenshotModel,
+    getVisionModel,
+    getTextModel,
     getSystemPrompt,
     getUserPrompt: () => state.currentPrompt,
     clearUserPrompt: () => { state.currentPrompt = null; },
@@ -1463,6 +1467,25 @@ async function getAudioScreenshotModel(): Promise<string> {
   } catch (error) {
     console.error("Error getting audio-screenshot model from store:", error);
     return "gemini-2.5-flash";
+  }
+}
+
+async function getVisionModel(): Promise<string> {
+  try {
+    return (await getStoreValue("vision-model")) || "meta-llama/llama-4-scout-17b-16e-instruct";
+  } catch (error) {
+    console.error("Error getting vision model from store:", error);
+    return "meta-llama/llama-4-scout-17b-16e-instruct";
+  }
+}
+
+async function getTextModel(): Promise<string> {
+  try {
+    // Use api-model (Response Model) for text generation in two-step processing
+    return (await getStoreValue("api-model")) || "openai/gpt-oss-120b";
+  } catch (error) {
+    console.error("Error getting text model from store:", error);
+    return "openai/gpt-oss-120b";
   }
 }
 
