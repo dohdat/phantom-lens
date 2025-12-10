@@ -33,29 +33,67 @@ interface TooltipProps {
 }
 
 // FIXED: Updated model options to match backend support
-const MODEL_OPTIONS = [
+const PROVIDER_OPTIONS = [
   {
-    id: "gemini-3-pro-preview",
-    name: "Gemini 3 Pro (Preview)",
-    description: "Latest Gemini 3 preview model for top-tier reasoning",
-    default: true,
+    id: "gemini",
+    name: "Google Gemini",
+    description: "Google's advanced AI models",
   },
   {
-    id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
-    description: "Advanced reasoning and capabilities (Google)",
-  },
-  {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    description: "Fast and efficient Gemini model (Google)",
-  },
-  {
-    id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
-    description: "Latest Gemini 2.0 model (Google)",
+    id: "groq",
+    name: "Groq",
+    description: "Fast inference with Groq",
   },
 ];
+
+const MODEL_OPTIONS: Record<string, Array<{id: string; name: string; description: string; default?: boolean}>> = {
+  gemini: [
+    {
+      id: "gemini-3-pro-preview",
+      name: "Gemini 3 Pro (Preview)",
+      description: "Latest Gemini 3 preview model for top-tier reasoning",
+      default: true,
+    },
+    {
+      id: "gemini-2.5-pro",
+      name: "Gemini 2.5 Pro",
+      description: "Advanced reasoning and capabilities (Google)",
+    },
+    {
+      id: "gemini-2.5-flash",
+      name: "Gemini 2.5 Flash",
+      description: "Fast and efficient Gemini model (Google)",
+    },
+    {
+      id: "gemini-2.0-flash",
+      name: "Gemini 2.0 Flash",
+      description: "Latest Gemini 2.0 model (Google)",
+    },
+  ],
+  groq: [
+    {
+      id: "meta-llama/llama-4-scout-17b-16e-instruct",
+      name: "Llama 4 Scout 17B (Vision)",
+      description: "Vision-capable model for image analysis",
+      default: true,
+    },
+    {
+      id: "openai/gpt-oss-120b",
+      name: "GPT OSS 120B",
+      description: "Open source 120B parameter model",
+    },
+    {
+      id: "llama-3.3-70b-versatile",
+      name: "Llama 3.3 70B",
+      description: "Meta's versatile 70B parameter model",
+    },
+    {
+      id: "llama-3.1-70b-versatile",
+      name: "Llama 3.1 70B",
+      description: "Meta's 70B parameter model",
+    },
+  ],
+};
 
 export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -65,7 +103,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
-  const defaultModel = MODEL_OPTIONS.find(m => m.default)?.id || "gemini-2.5-flash";
+  const [selectedProvider, setSelectedProvider] = useState("gemini");
+  const defaultModel = "gemini-2.5-flash";
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const apiKeyInputRef = useRef<HTMLInputElement>(null);
   const modelSelectRef = useRef<HTMLInputElement>(null);
@@ -153,6 +192,10 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         if (configData?.apiKey) {
           console.log("Setting API key from config");
           setApiKey(configData.apiKey);
+        }
+        if (configData?.provider) {
+          console.log("Setting provider from config:", configData.provider);
+          setSelectedProvider(configData.provider);
         }
         if (configData?.model) {
           console.log("Setting model from config:", response.data.model);
@@ -414,7 +457,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       // FIXED: Use real API call to save configuration
       const response = await window.electronAPI.setApiConfig({
         apiKey: apiKey.trim(),
-        model: selectedModel
+        model: selectedModel,
+        provider: selectedProvider
       });
       
       console.log("API config save response:", response);
@@ -648,10 +692,12 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       // FIXED: Clear the configuration using the real API
       await window.electronAPI.setApiConfig({
         apiKey: "",
-        model: defaultModel
+        model: defaultModel,
+        provider: "gemini"
       });
       
       setApiKey("");
+      setSelectedProvider("gemini");
       setSelectedModel(defaultModel);
       console.log("Configuration reset successfully");
     } catch (err) {
@@ -932,7 +978,38 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
               <h3 className="text-sm font-medium text-white mb-2 text-center">API Configuration</h3>
               <div className="space-y-3">
                   <div>
-                  <label className="block text-xs text-white/70 mb-1 text-center">Gemini API Key</label>
+                  <label className="block text-xs text-white/70 mb-1 text-center">Provider</label>
+                  <select
+                      value={selectedProvider}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      const newProvider = e.target.value;
+                      setSelectedProvider(newProvider);
+                      // Set a default model based on provider
+                      if (newProvider === "gemini") {
+                        setSelectedModel("gemini-2.5-flash");
+                      } else if (newProvider === "groq") {
+                        setSelectedModel("meta-llama/llama-4-scout-17b-16e-instruct");
+                      }
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  >
+                    {PROVIDER_OPTIONS.map((provider) => (
+                      <option key={provider.id} value={provider.id} style={{ background: '#1a1a1a', color: 'white' }}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                  </div>
+                  <div>
+                  <label className="block text-xs text-white/70 mb-1 text-center">{selectedProvider === 'gemini' ? 'Gemini' : 'Groq'} API Key</label>
                   <input
                       ref={apiKeyInputRef}
                       type="password"
@@ -943,7 +1020,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    placeholder="AIza..."
+                    placeholder={selectedProvider === 'gemini' ? 'AIza...' : 'gsk_...'}
                     className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
                         ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
@@ -964,7 +1041,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }}
                     disabled={!isInteractive}
                     tabIndex={isInteractive ? 0 : -1}
-                    placeholder="gemini-2.5-flash"
+                    placeholder={selectedProvider === 'gemini' ? 'gemini-2.5-flash' : 'meta-llama/llama-4-scout-17b-16e-instruct'}
                     className={`w-full px-4 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
                       isInteractive 
                         ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
@@ -972,6 +1049,13 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                     }`}
                     style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
                     />
+                    <div className="mt-1 text-[10px] text-white/50 text-center">
+                      {selectedProvider === 'gemini' ? (
+                        <>Common: gemini-3-pro-preview, gemini-2.5-pro, gemini-2.5-flash</>
+                      ) : (
+                        <>Vision: meta-llama/llama-4-scout-17b-16e-instruct | Text: llama-3.3-70b-versatile</>
+                      )}
+                    </div>
                         </div>
                 <button
                   ref={saveButtonRef}

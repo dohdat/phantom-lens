@@ -1221,12 +1221,13 @@ async function loadEnvVariables() {
   try {
     const storedApiKey = await getStoreValue("api-key");
     const storedModel = (await getStoreValue("api-model")) || "gemini-2.0-flash";
+    const storedProvider = (await getStoreValue("api-provider")) || "gemini";
 
     if (storedApiKey && storedModel) {
-      process.env.API_PROVIDER = "gemini";
+      process.env.API_PROVIDER = storedProvider;
       process.env.API_KEY = storedApiKey;
       process.env.API_MODEL = storedModel;
-      console.log(`API configuration loaded: Provider=gemini, Model=${storedModel}`);
+      console.log(`API configuration loaded: Provider=${storedProvider}, Model=${storedModel}`);
     } else {
       console.log("No API key found in user preferences. User will be prompted to enter one.");
       setTimeout(() => {

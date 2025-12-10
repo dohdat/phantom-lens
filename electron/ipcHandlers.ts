@@ -66,6 +66,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
     try {
       const apiKey = await getStoreValue("api-key");
       const model = (await getStoreValue("api-model")) || "gemini-2.0-flash";
+      const provider = (await getStoreValue("api-provider")) || "gemini";
 
       if (!apiKey) {
         return { success: false, error: "API key not found" };
@@ -73,7 +74,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
       return { 
         success: true, 
-        data: { apiKey, model, provider: "gemini" }
+        data: { apiKey, model, provider }
       };
     } catch (error: any) {
       console.error("Error getting API config:", error);
@@ -83,10 +84,10 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
 
   ipcMain.handle("set-api-config", createSafeIpcHandler(async (
     _event: any,
-    config: { apiKey: string; model: string }
+    config: { apiKey: string; model: string; provider?: string }
   ) => {
     try {
-      const { apiKey, model } = config;
+      const { apiKey, model, provider = "gemini" } = config;
 
       // Enhanced validation
       if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
@@ -97,25 +98,19 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
         return { success: false, error: "Invalid model selection" };
       }
 
-      // Validate model format for Gemini
-      const validGeminiModels = [
-        "gemini-3-pro-preview",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        "gemini-2.0-flash"
-      ];
-
-      if (!validGeminiModels.includes(model.trim())) {
-        console.warn(`Unknown model selected: ${model}`);
+      // Validate provider
+      if (!provider || (provider !== "gemini" && provider !== "groq")) {
+        return { success: false, error: "Invalid provider. Must be 'gemini' or 'groq'" };
       }
 
       // Store the configuration
-      const [successKey, successModel] = await Promise.all([
+      const [successKey, successModel, successProvider] = await Promise.all([
         setStoreValue("api-key", apiKey.trim()),
-        setStoreValue("api-model", model.trim())
+        setStoreValue("api-model", model.trim()),
+        setStoreValue("api-provider", provider)
       ]);
 
-      if (!successKey || !successModel) {
+      if (!successKey || !successModel || !successProvider) {
         console.error("Failed to save one or more API config values to store.");
         return { 
           success: false, 
@@ -126,7 +121,7 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
       // Set environment variables
       process.env.API_KEY = apiKey.trim();
       process.env.API_MODEL = model.trim();
-      process.env.API_PROVIDER = "gemini";
+      process.env.API_PROVIDER = provider;
 
       // Notify that the config has been updated
       const mainWindow = deps.getMainWindow();
@@ -134,8 +129,8 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
         mainWindow.webContents.send("api-key-updated");
       }
 
-      console.log(`API configuration saved: Model=${model.trim()}`);
-      return { success: true, data: { apiKey: "***", model: model.trim() } };
+      console.log(`API configuration saved: Provider=${provider}, Model=${model.trim()}`);
+      return { success: true, data: { apiKey: "***", model: model.trim(), provider } };
       
     } catch (error: any) {
       console.error("Error setting API configuration:", error);

@@ -121,6 +121,125 @@ export class ProcessingHelper {
     }
   }
 
+  /**
+   * Check if a Groq model supports vision
+   */
+  private isGroqVisionModel(model: string): boolean {
+    const visionModels = [
+      "meta-llama/llama-4-scout-17b-16e-instruct"
+    ];
+    return visionModels.includes(model);
+  }
+
+  /**
+   * Call Groq API with text prompt and optional images
+   */
+  private async callGroqAPI(
+    prompt: string,
+    apiKey: string,
+    model: string,
+    signal: AbortSignal,
+    onChunk?: (text: string) => void,
+    base64Images?: string[]
+  ): Promise<string> {
+    // Build message content based on whether images are provided
+    let messageContent: any;
+    if (base64Images && base64Images.length > 0 && this.isGroqVisionModel(model)) {
+      // Multi-modal content with images
+      messageContent = [
+        {
+          type: 'text',
+          text: prompt
+        },
+        ...base64Images.map(imageData => ({
+          type: 'image_url',
+          image_url: {
+            url: `data:image/png;base64,${imageData}`
+          }
+        }))
+      ];
+    } else {
+      // Text-only content
+      messageContent = prompt;
+    }
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: messageContent
+          }
+        ],
+        temperature: 1,
+        max_completion_tokens: 1024,
+        top_p: 1,
+        stream: true
+      }),
+      signal
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const errJson = await response.json();
+        detail = errJson?.error?.message || JSON.stringify(errJson);
+      } catch (e) {
+        detail = response.statusText;
+      }
+      throw new Error(`Groq API error: HTTP ${response.status} ${detail}`);
+    }
+
+    // Handle streaming response
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body from Groq API');
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullText += content;
+                if (onChunk) {
+                  onChunk(content);
+                }
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return fullText;
+  }
+
   public async processScreenshots(): Promise<void> {
     if (this.isCurrentlyProcessing) {
       console.log("Processing already in progress. Skipping duplicate call.");
@@ -488,7 +607,7 @@ export class ProcessingHelper {
     }
   }
   /**
-   * Helper to process audio transcript with Gemini - text only, no images
+   * Helper to process audio transcript with Gemini or Groq - text only, no images
    */
   private async processAudioTranscriptHelper(
     prompt: string,
@@ -501,14 +620,11 @@ export class ProcessingHelper {
     try {
       const apiKey = process.env.API_KEY;
       const model = await this.deps.getAudioOnlyModel();
+      const provider = process.env.API_PROVIDER || "gemini";
 
       if (!apiKey) {
         throw new Error("API key not found. Please configure it in settings.");
       }
-
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
-      const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
 
       const mainWindow = this.deps.getMainWindow();
 
@@ -518,67 +634,129 @@ export class ProcessingHelper {
       signal.addEventListener("abort", abortHandler);
 
       try {
-        // Stream the response with word-buffering - TEXT ONLY, no images
-        const result = await geminiModel.generateContentStream([prompt]);
-
-        accumulatedText = "";
-        let pendingBuffer = "";
-        let lastSentLength = 0;
-        const FLUSH_INTERVAL = 80;
-        let lastFlushTime = Date.now();
-        
-        const isWordBoundary = (char: string): boolean => {
-          return /[\s\n.,!?;:)\]}>"`']/.test(char);
-        };
-        
-        const flushToUI = (force: boolean = false) => {
-          const now = Date.now();
-          const timeSinceLastFlush = now - lastFlushTime;
+        if (provider === "groq") {
+          // Use Groq API for text-only processing
+          console.log(`[Groq] Processing audio transcript with model: ${model}`);
           
-          if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
-            let flushUpTo = pendingBuffer.length;
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
             
-            if (!force) {
-              for (let i = pendingBuffer.length - 1; i >= 0; i--) {
-                if (isWordBoundary(pendingBuffer[i])) {
-                  flushUpTo = i + 1;
-                  break;
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
                 }
               }
-              if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
-                return;
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
               }
             }
+          };
+
+          await this.callGroqAPI(prompt, apiKey, model, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          });
+          
+          flushToUI(true);
+          responseText = accumulatedText;
+        } else {
+          // Use Gemini API for text-only processing
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
+          const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
+
+          // Stream the response with word-buffering - TEXT ONLY, no images
+          const result = await geminiModel.generateContentStream([prompt]);
+
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
             
-            const toFlush = pendingBuffer.slice(0, flushUpTo);
-            accumulatedText += toFlush;
-            pendingBuffer = pendingBuffer.slice(flushUpTo);
-            
-            if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
-              chunksSent = true;
-              mainWindow.webContents.send(
-                this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
-                { response: accumulatedText }
-              );
-              lastSentLength = accumulatedText.length;
-              lastFlushTime = now;
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
             }
-          }
-        };
+          };
 
-        for await (const chunk of result.stream) {
-          if (signal.aborted) {
-            throw new Error("Request aborted");
-          }
+          for await (const chunk of result.stream) {
+            if (signal.aborted) {
+              throw new Error("Request aborted");
+            }
 
-          const chunkText = chunk.text();
-          pendingBuffer += chunkText;
-          flushToUI(false);
+            const chunkText = chunk.text();
+            pendingBuffer += chunkText;
+            flushToUI(false);
+          }
+          
+          flushToUI(true);
+          responseText = accumulatedText;
         }
-        
-        flushToUI(true);
-
-        responseText = accumulatedText;
 
         if (mainWindow && !mainWindow.isDestroyed()) {
           try {
@@ -644,9 +822,15 @@ export class ProcessingHelper {
     try {
       const apiKey = process.env.API_KEY;
       const model = await this.deps.getAudioScreenshotModel();
+      const provider = process.env.API_PROVIDER || "gemini";
 
       if (!apiKey) {
         throw new Error("API key not found. Please configure it in settings.");
+      }
+
+      // Check if using Groq with a non-vision model
+      if (provider === "groq" && !this.isGroqVisionModel(model)) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or use audio-only mode.`);
       }
 
       // Get screenshots from queue
@@ -663,6 +847,90 @@ export class ProcessingHelper {
         })
       );
 
+      if (provider === "groq") {
+        // Use Groq API for audio with screenshots
+        console.log(`[Groq] Processing audio with screenshots using vision model: ${model}`);
+        
+        const mainWindow = this.deps.getMainWindow();
+        if (signal.aborted) throw new Error("Request aborted");
+
+        const abortHandler = () => {};
+        signal.addEventListener("abort", abortHandler);
+
+        try {
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"\`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
+            
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
+            }
+          };
+
+          const base64Images = optimizedScreenshots.map(s => s.data);
+          await this.callGroqAPI(prompt, apiKey, model, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          }, base64Images);
+          
+          flushToUI(true);
+          responseText = accumulatedText;
+
+          this.screenshotHelper.clearExtraScreenshotQueue();
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+              const main = require("./main");
+              main.saveResponseToHistory?.(responseText);
+            } catch {}
+            mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+          }
+
+          return { success: true, data: responseText };
+        } finally {
+          try {
+            signal.removeEventListener("abort", abortHandler);
+          } catch (e) {}
+        }
+      }
+
+      // Gemini processing
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModelId = model.startsWith("gemini-") ? `models/${model}` : model;
       const geminiModel = genAI.getGenerativeModel({ model: geminiModelId });
@@ -896,8 +1164,126 @@ export class ProcessingHelper {
     let responseText = "";
     let chunksSent = false; // Track if any chunks were sent
     let accumulatedText = ""; // Accumulated text from chunks
+    const provider = process.env.API_PROVIDER || "gemini";
     
     try {
+      // Check if using Groq with a non-vision model
+      if (provider === "groq" && !this.isGroqVisionModel(model)) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or switch to Gemini.`);
+      }
+
+      if (provider === "groq") {
+        // Use Groq API for vision
+        console.log(`[Groq] Processing screenshots with vision model: ${model}`);
+        console.log(`[PROCESSING] Images to be sent: ${base64Images.length}`);
+
+        // Try to get custom system prompt from settings
+        let customPrompt: string | null = null;
+        try {
+          customPrompt = await this.deps.getSystemPrompt();
+        } catch (e) {
+          console.warn("Failed to get custom system prompt:", e);
+        }
+
+        // Use custom prompt if available, otherwise use default
+        let promptLines: string[];
+        if (customPrompt && customPrompt.trim().length > 0) {
+          console.log("[PROCESSING] Using custom system prompt from settings");
+          promptLines = customPrompt.split('\n');
+        } else {
+          console.log("[PROCESSING] Using default system prompt");
+          promptLines = this.getDefaultPromptLines();
+        }
+
+        // Include optional user prompt (normal mode typing)
+        try {
+          const typed = this.deps.getUserPrompt?.();
+          if (typed && typed.trim().length > 0) {
+            promptLines.push(`## User Prompt`, "", typed.trim(), "");
+            // Clear after consuming to avoid reuse
+            this.deps.clearUserPrompt?.();
+          }
+        } catch {}
+
+        const prompt = promptLines.join("\n");
+        const mainWindow = this.deps.getMainWindow();
+
+        if (signal.aborted) throw new Error("Request aborted");
+
+        const abortHandler = () => {};
+        signal.addEventListener("abort", abortHandler);
+
+        try {
+          accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
+            
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                chunksSent = true;
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
+            }
+          };
+
+          await this.callGroqAPI(prompt, apiKey, model, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          }, base64Images);
+          
+          flushToUI(true);
+          responseText = accumulatedText;
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+              const main = require("./main");
+              main.saveResponseToHistory?.(responseText);
+            } catch {}
+            mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS, { response: responseText });
+          }
+
+          return { success: true, data: responseText };
+        } finally {
+          try {
+            signal.removeEventListener("abort", abortHandler);
+          } catch (e) {}
+        }
+      }
+
+      // Gemini processing
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModelId = model.startsWith("gemini-")
         ? `models/${model}`
@@ -1150,11 +1536,16 @@ export class ProcessingHelper {
         throw new Error("API key not found. Please configure it in settings.");
       }
 
+      // Check if using Groq with a non-vision model
+      if (provider === "groq" && !this.isGroqVisionModel(model)) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or switch to Gemini.`);
+      }
+
       const base64Images = imageDataList.map(
         (data) => data // Keep the base64 string as is
       );
 
-      // Validate base64 data before sending to Gemini
+      // Validate base64 data before sending to API
       const validBase64Images = base64Images.filter((data, index) => {
         if (!data || typeof data !== 'string') {
           return false;
@@ -1177,7 +1568,122 @@ export class ProcessingHelper {
         throw new Error("No valid screenshot data available for follow-up processing. Please try taking a new screenshot.");
       }
 
-      // For follow-up, use the same approach as the initial response, including analysis/summary
+      if (provider === "groq") {
+        // Use Groq API for vision follow-up
+        console.log(`[Groq] Processing follow-up screenshots with vision model: ${model}`);
+
+        // Try to get custom system prompt from settings
+        let customPrompt: string | null = null;
+        try {
+          customPrompt = await this.deps.getSystemPrompt();
+        } catch (e) {
+          console.warn("Failed to get custom system prompt for follow-up:", e);
+        }
+
+        // Use custom prompt if available, otherwise use default follow-up prompt
+        let promptLines: string[];
+        if (customPrompt && customPrompt.trim().length > 0) {
+          console.log("[FOLLOW-UP] Using custom system prompt from settings");
+          promptLines = customPrompt.split('\n');
+          promptLines.push(
+            ``,
+            `## Previous Response Context`,
+            `This is a follow-up to a previous response. Please consider the context and build upon it appropriately.`,
+            ``
+          );
+        } else {
+          console.log("[FOLLOW-UP] Using default system prompt");
+          promptLines = this.getDefaultFollowUpPromptLines();
+        }
+
+        // Include user's typed follow-up text if available
+        if (userPrompt && userPrompt.trim().length > 0) {
+          promptLines.push(`## Additional User Question`, "", userPrompt.trim(), "");
+        }
+
+        // Add context about the previous response if available
+        try {
+          const previousResponse = this.deps.getPreviousResponse?.();
+          if (previousResponse && previousResponse.trim().length > 0) {
+            promptLines.push(`## Previous Response`, "", previousResponse.trim(), "");
+          }
+        } catch {}
+
+        const prompt = promptLines.join("\n");
+
+        if (signal.aborted) throw new Error("Request aborted");
+
+        const abortHandler = () => {};
+        signal.addEventListener("abort", abortHandler);
+
+        try {
+          let accumulatedText = "";
+          let pendingBuffer = "";
+          let lastSentLength = 0;
+          const FLUSH_INTERVAL = 80;
+          let lastFlushTime = Date.now();
+          
+          const isWordBoundary = (char: string): boolean => {
+            return /[\s\n.,!?;:)\]}>"`']/.test(char);
+          };
+          
+          const flushToUI = (force: boolean = false) => {
+            const now = Date.now();
+            const timeSinceLastFlush = now - lastFlushTime;
+            
+            if (pendingBuffer.length > 0 && (force || timeSinceLastFlush >= FLUSH_INTERVAL)) {
+              let flushUpTo = pendingBuffer.length;
+              
+              if (!force) {
+                for (let i = pendingBuffer.length - 1; i >= 0; i--) {
+                  if (isWordBoundary(pendingBuffer[i])) {
+                    flushUpTo = i + 1;
+                    break;
+                  }
+                }
+                if (flushUpTo === pendingBuffer.length && pendingBuffer.length < 20) {
+                  return;
+                }
+              }
+              
+              const toFlush = pendingBuffer.slice(0, flushUpTo);
+              accumulatedText += toFlush;
+              pendingBuffer = pendingBuffer.slice(flushUpTo);
+              
+              if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
+                mainWindow.webContents.send(
+                  this.deps.PROCESSING_EVENTS.EXTRA_RESPONSE_CHUNK,
+                  { response: accumulatedText }
+                );
+                lastSentLength = accumulatedText.length;
+                lastFlushTime = now;
+              }
+            }
+          };
+
+          await this.callGroqAPI(prompt, apiKey, model, signal, (chunk) => {
+            pendingBuffer += chunk;
+            flushToUI(false);
+          }, validBase64Images);
+          
+          flushToUI(true);
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(
+              this.deps.PROCESSING_EVENTS.EXTRA_RESPONSE_SUCCESS,
+              { response: accumulatedText }
+            );
+          }
+
+          return { success: true, data: accumulatedText };
+        } finally {
+          try {
+            signal.removeEventListener("abort", abortHandler);
+          } catch (e) {}
+        }
+      }
+
+      // Gemini processing - For follow-up, use the same approach as the initial response
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModelId = model.startsWith("gemini-")
         ? `models/${model}`
