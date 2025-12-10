@@ -462,7 +462,7 @@ export class ProcessingHelper {
             "" // No user prompt for main processing
           );
 
-          if (result.success) {
+          if (result.success && 'data' in result) {
             this.deps.setHasFollowedUp(true);
             mainWindow.webContents.send(
               this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS,
@@ -1271,7 +1271,7 @@ export class ProcessingHelper {
           if (responseResult.success) {
             this.screenshotHelper.clearExtraScreenshotQueue();
             // Store the response for follow-up context
-            this.previousResponse = responseResult.data;
+            this.previousResponse = responseResult.data ?? null;
             mainWindow.webContents.send(
               this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
               { response: responseResult.data }
@@ -2338,7 +2338,7 @@ export class ProcessingHelper {
         userPrompt // Pass user prompt to follow-up processing
       );
 
-      if (result.success && result.data) {
+      if (result.success && 'data' in result && result.data) {
         // Send follow-up response
         mainWindow.webContents.send(this.deps.PROCESSING_EVENTS.FOLLOW_UP_SUCCESS, {
           response: result.data,
