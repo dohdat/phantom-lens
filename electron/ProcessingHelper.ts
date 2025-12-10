@@ -1927,19 +1927,6 @@ export class ProcessingHelper {
       if (provider === "groq" && !this.isGroqVisionModel(model)) {
         throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
       }
-        }
-        
-        // Check minimum length (base64 should be reasonably long)
-        if (data.length < 100) {
-          return false;
-        }
-        
-        return true;
-      });
-
-      if (validBase64Images.length === 0) {
-        throw new Error("No valid screenshot data available for follow-up processing. Please try taking a new screenshot.");
-      }
 
       if (provider === "groq") {
         // Use Groq API for vision follow-up
