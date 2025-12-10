@@ -17,8 +17,8 @@ const MemoizedResponse = memo(Response);
 // ============================================================================
 const VIEW_DIMENSIONS: Record<"initial" | "response" | "followup", { width: number; height: number }> = {
   initial: { width: 832, height: 260 },
-  response: { width: 832, height: 500 },
-  followup: { width: 832, height: 700 },
+  response: { width: 832, height: 1500 },
+  followup: { width: 832, height: 1800 },
 };
 
 function useDimensionUpdates(view: "initial" | "response" | "followup") {
