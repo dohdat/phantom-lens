@@ -1127,12 +1127,6 @@ Your response:`;
 
   // Text model now uses api-model (Response Model) - no separate handlers needed
 
-    } catch (error: any) {
-      console.error("Error setting audio-screenshot model:", error);
-      return { success: false, error: "Failed to save audio-screenshot model" };
-    }
-  }, "set-audio-screenshot-model"));
-
   // ============================================================================
   // Whisper Model Handlers
   // ============================================================================
