@@ -226,15 +226,16 @@ async function initializeStore() {
   }
 }
 
-export async function getStoreValue(key: string): Promise<any> {
+export async function getStoreValue(key: string, defaultValue?: any): Promise<any> {
   if (!store) {
     const initialized = await initializeStore();
     if (!initialized || !store) {
       console.error("Store access failed: Could not initialize store.");
-      return undefined;
+      return defaultValue;
     }
   }
-  return store.get(key);
+  const value = store.get(key);
+  return value !== undefined ? value : defaultValue;
 }
 
 export async function setStoreValue(key: string, value: any): Promise<boolean> {

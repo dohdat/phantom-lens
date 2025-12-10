@@ -36,14 +36,14 @@ function createIpcHandler<T extends any[], R>(
 
 function createSafeIpcHandler<T extends any[], R>(
   handler: (...args: T) => Promise<IpcResponse<R>> | IpcResponse<R>,
-  handlerName: string
+  handlerName?: string
 ) {
   return async (...args: T): Promise<IpcResponse<R>> => {
     try {
       const result = await handler(...args);
       return result;
     } catch (error: any) {
-      console.error(`Safe IPC Handler [${handlerName}] error:`, error);
+      console.error(`Safe IPC Handler [${handlerName || 'unknown'}] error:`, error);
       return { 
         success: false, 
         error: error.message || String(error) 
