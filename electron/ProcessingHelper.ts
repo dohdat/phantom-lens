@@ -1652,7 +1652,7 @@ export class ProcessingHelper {
               
               if (mainWindow && !mainWindow.isDestroyed() && accumulatedText.length > lastSentLength) {
                 mainWindow.webContents.send(
-                  this.deps.PROCESSING_EVENTS.EXTRA_RESPONSE_CHUNK,
+                  this.deps.PROCESSING_EVENTS.RESPONSE_CHUNK,
                   { response: accumulatedText }
                 );
                 lastSentLength = accumulatedText.length;
@@ -1670,7 +1670,7 @@ export class ProcessingHelper {
 
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send(
-              this.deps.PROCESSING_EVENTS.EXTRA_RESPONSE_SUCCESS,
+              this.deps.PROCESSING_EVENTS.RESPONSE_SUCCESS,
               { response: accumulatedText }
             );
           }
