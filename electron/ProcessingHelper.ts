@@ -178,7 +178,6 @@ export class ProcessingHelper {
           }
         ],
         temperature: 1,
-        max_completion_tokens: 1024,
         top_p: 1,
         stream: true
       }),
