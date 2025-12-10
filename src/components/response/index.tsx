@@ -76,12 +76,48 @@ export default function Response({ setView }: ResponseProps) {
   // Use refs to access latest state in callbacks without causing re-renders
   const isStreamingRef = useRef(false);
   const streamedResponseRef = useRef("");
+  const heightAdjustTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update refs when state changes
   useEffect(() => {
     isStreamingRef.current = isStreaming;
     streamedResponseRef.current = streamedResponse;
   }, [isStreaming, streamedResponse]);
+
+  // Adjust window height when response is fully loaded (debounced)
+  useEffect(() => {
+    // Only adjust after streaming is done and we have content
+    if (isStreaming || !responseData || errorMessage) return;
+
+    // Clear any pending adjustment
+    if (heightAdjustTimeoutRef.current) {
+      clearTimeout(heightAdjustTimeoutRef.current);
+    }
+
+    // Wait for content to render, then adjust height
+    heightAdjustTimeoutRef.current = setTimeout(() => {
+      const container = contentRef.current;
+      if (!container) return;
+
+      // Measure actual content height
+      const contentHeight = container.scrollHeight;
+      // Add padding and ensure reasonable bounds (min 500px, max 750px)
+      const adjustedHeight = Math.min(Math.max(contentHeight + 40, 500), 750);
+
+      console.log("[Response] Adjusting window height:", contentHeight, "->", adjustedHeight);
+
+      window.electronAPI?.updateContentDimensions({
+        width: 832,
+        height: adjustedHeight,
+      });
+    }, 300); // Wait 300ms after streaming stops
+
+    return () => {
+      if (heightAdjustTimeoutRef.current) {
+        clearTimeout(heightAdjustTimeoutRef.current);
+      }
+    };
+  }, [isStreaming, responseData, errorMessage]);
 
   // Throttle chunk updates to prevent excessive re-renders and window fluctuations
   const chunkUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);

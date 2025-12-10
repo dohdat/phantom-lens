@@ -13,10 +13,11 @@ const MemoizedResponse = memo(Response);
 // ============================================================================
 // HOTFIX: Optimized Dimension Updates to Prevent Flickering and Conflicts
 // Only update width on 'initial' view; in 'response' view, send height-only updates to preserve fixed width
+// FIXED: Reduced response height to 500px to prevent window cutoff on fast responses
 // ============================================================================
 const VIEW_DIMENSIONS: Record<"initial" | "response" | "followup", { width: number; height: number }> = {
   initial: { width: 832, height: 260 },
-  response: { width: 832, height: 660 },
+  response: { width: 832, height: 500 },
   followup: { width: 832, height: 700 },
 };
 
