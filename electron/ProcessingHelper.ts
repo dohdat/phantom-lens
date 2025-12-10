@@ -163,6 +163,10 @@ export class ProcessingHelper {
       messageContent = prompt;
     }
 
+    // Get configurable parameters from environment or use defaults
+    const maxCompletionTokens = parseInt(process.env.MAX_COMPLETION_TOKENS || "8192");
+    const reasoningEffort = process.env.REASONING_EFFORT || "medium";
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -178,7 +182,8 @@ export class ProcessingHelper {
           }
         ],
         temperature: 1,
-        max_completion_tokens: 8192,
+        max_completion_tokens: maxCompletionTokens,
+        reasoning_effort: reasoningEffort,
         top_p: 1,
         stream: true
       }),

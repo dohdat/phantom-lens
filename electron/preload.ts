@@ -187,6 +187,25 @@ interface ElectronAPI {
     data?: { modelPath: string };
     error?: string;
   }>;
+  // Groq API Parameters
+  getMaxCompletionTokens: () => Promise<{
+    success: boolean;
+    data?: { maxCompletionTokens: number };
+    error?: string;
+  }>;
+  setMaxCompletionTokens: (maxTokens: number) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  getReasoningEffort: () => Promise<{
+    success: boolean;
+    data?: { reasoningEffort: string };
+    error?: string;
+  }>;
+  setReasoningEffort: (effort: string) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   // Usage Counter
   getAppOpenCount: () => Promise<{
     success: boolean;
@@ -513,6 +532,11 @@ const electronAPI = {
   getWhisperModelPath: () => ipcRenderer.invoke("get-whisper-model-path"),
   setWhisperModelPath: (modelPath: string) => ipcRenderer.invoke("set-whisper-model-path", modelPath),
   getDefaultWhisperModelPath: () => ipcRenderer.invoke("get-default-whisper-model-path"),
+  // Groq API Parameters
+  getMaxCompletionTokens: () => ipcRenderer.invoke("get-max-completion-tokens"),
+  setMaxCompletionTokens: (maxTokens: number) => ipcRenderer.invoke("set-max-completion-tokens", maxTokens),
+  getReasoningEffort: () => ipcRenderer.invoke("get-reasoning-effort"),
+  setReasoningEffort: (effort: string) => ipcRenderer.invoke("set-reasoning-effort", effort),
   // Auto Update
   checkForAutoUpdate: () => ipcRenderer.invoke("check-for-auto-update"),
   downloadAutoUpdate: () => ipcRenderer.invoke("download-auto-update"),

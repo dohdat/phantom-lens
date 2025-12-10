@@ -121,6 +121,9 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const [visionModel, setVisionModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct");
   // Whisper model state
   const [whisperModelPath, setWhisperModelPath] = useState("");
+  // Groq API parameters
+  const [maxCompletionTokens, setMaxCompletionTokens] = useState("8192");
+  const [reasoningEffort, setReasoningEffort] = useState("medium");
   // Update state - persist once shown
   const [updateInfo, setUpdateInfo] = useState<{
     updateAvailable: boolean;
@@ -260,6 +263,25 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         }
       } catch (e) {
         console.warn("Failed to load Whisper model path:", e);
+      }
+
+      // Load Groq API parameters
+      try {
+        const maxTokensResponse = await window.electronAPI.getMaxCompletionTokens?.();
+        if (maxTokensResponse?.success && maxTokensResponse.data?.maxCompletionTokens) {
+          setMaxCompletionTokens(maxTokensResponse.data.maxCompletionTokens.toString());
+        }
+      } catch (e) {
+        console.warn("Failed to load max_completion_tokens:", e);
+      }
+
+      try {
+        const reasoningResponse = await window.electronAPI.getReasoningEffort?.();
+        if (reasoningResponse?.success && reasoningResponse.data?.reasoningEffort) {
+          setReasoningEffort(reasoningResponse.data.reasoningEffort);
+        }
+      } catch (e) {
+        console.warn("Failed to load reasoning_effort:", e);
       }
     } catch (error) {
       console.error("Failed to load API configuration:", error);
@@ -455,6 +477,15 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       
       if (response?.success) {
         console.log("Configuration saved successfully");
+        
+        // Save Groq API parameters
+        try {
+          await window.electronAPI.setMaxCompletionTokens?.(parseInt(maxCompletionTokens));
+          await window.electronAPI.setReasoningEffort?.(reasoningEffort);
+        } catch (e) {
+          console.warn("Failed to save Groq parameters:", e);
+        }
+        
         setError(null);
         // Reload configuration from backend to ensure UI reflects saved values
         await loadCurrentConfig();
@@ -468,7 +499,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, selectedModel, loadCurrentConfig]);
+  }, [apiKey, selectedModel, selectedProvider, maxCompletionTokens, reasoningEffort, loadCurrentConfig]);
 
   // Reset scroll position when tooltip opens and auto-focus API key input
   useEffect(() => {
@@ -1047,6 +1078,66 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       )}
                     </div>
                         </div>
+                  {selectedProvider === 'groq' && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-white/70 mb-1 text-center">
+                          Max Completion Tokens: {maxCompletionTokens}
+                        </label>
+                        <input
+                          type="range"
+                          min="1024"
+                          max="65536"
+                          step="256"
+                          value={maxCompletionTokens}
+                          onChange={(e) => {
+                            if (!isInteractive) return;
+                            setMaxCompletionTokens(e.target.value);
+                          }}
+                          disabled={!isInteractive}
+                          tabIndex={isInteractive ? 0 : -1}
+                          className={`w-full h-2 rounded-lg appearance-none cursor-pointer transition-all duration-200 ${
+                            isInteractive 
+                              ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
+                              : 'cursor-default'
+                          }`}
+                          style={{
+                            background: isTransparent 
+                              ? 'linear-gradient(to right, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.8))' 
+                              : 'linear-gradient(to right, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.8))'
+                          }}
+                        />
+                        <div className="mt-1 text-[10px] text-white/50 text-center">
+                          Maximum tokens in the response (1024-65536)
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/70 mb-1 text-center">Reasoning Effort</label>
+                        <select
+                          value={reasoningEffort}
+                          onChange={(e) => {
+                            if (!isInteractive) return;
+                            setReasoningEffort(e.target.value);
+                          }}
+                          disabled={!isInteractive}
+                          tabIndex={isInteractive ? 0 : -1}
+                          className={`w-full px-4 py-2 rounded-lg text-white text-sm transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                            isInteractive 
+                              ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
+                              : 'cursor-default'
+                          }`}
+                          style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                        >
+                          <option value="low" className="bg-gray-800">Low</option>
+                          <option value="medium" className="bg-gray-800">Medium</option>
+                          <option value="high" className="bg-gray-800">High</option>
+                        </select>
+                        <div className="mt-1 text-[10px] text-white/50 text-center">
+                          Reasoning depth for Groq models (default: medium)
+                        </div>
+                      </div>
+                    </>
+                  )}
                 <button
                   ref={saveButtonRef}
                   onClick={handleSaveConfig}

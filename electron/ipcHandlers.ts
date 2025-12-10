@@ -139,6 +139,71 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   }, "set-api-config"));
 
   // ============================================================================
+  // Groq API Parameters Handlers
+  // ============================================================================
+  ipcMain.handle("set-max-completion-tokens", createSafeIpcHandler(async (
+    _event: any,
+    maxTokens: number
+  ) => {
+    try {
+      if (typeof maxTokens !== "number" || maxTokens < 1000 || maxTokens > 65536) {
+        return { success: false, error: "Invalid max_completion_tokens value (must be 1000-65536)" };
+      }
+      const success = await setStoreValue("max-completion-tokens", maxTokens);
+      if (!success) {
+        return { success: false, error: "Failed to save max_completion_tokens" };
+      }
+      process.env.MAX_COMPLETION_TOKENS = maxTokens.toString();
+      console.log(`max_completion_tokens set to: ${maxTokens}`);
+      return { success: true, data: { maxCompletionTokens: maxTokens } };
+    } catch (error: any) {
+      console.error("Error setting max_completion_tokens:", error);
+      return { success: false, error: "Failed to save max_completion_tokens" };
+    }
+  }, "set-max-completion-tokens"));
+
+  ipcMain.handle("get-max-completion-tokens", createSafeIpcHandler(async () => {
+    try {
+      const maxTokens = await getStoreValue("max-completion-tokens", 8192);
+      return { success: true, data: { maxCompletionTokens: maxTokens } };
+    } catch (error: any) {
+      console.error("Error getting max_completion_tokens:", error);
+      return { success: false, error: "Failed to get max_completion_tokens" };
+    }
+  }, "get-max-completion-tokens"));
+
+  ipcMain.handle("set-reasoning-effort", createSafeIpcHandler(async (
+    _event: any,
+    effort: string
+  ) => {
+    try {
+      if (!["low", "medium", "high"].includes(effort)) {
+        return { success: false, error: "Invalid reasoning_effort value" };
+      }
+      const success = await setStoreValue("reasoning-effort", effort);
+      if (!success) {
+        return { success: false, error: "Failed to save reasoning_effort" };
+      }
+      process.env.REASONING_EFFORT = effort;
+      console.log(`reasoning_effort set to: ${effort}`);
+      return { success: true, data: { reasoningEffort: effort } };
+    } catch (error: any) {
+      console.error("Error setting reasoning_effort:", error);
+      return { success: false, error: "Failed to save reasoning_effort" };
+    }
+  }, "set-reasoning-effort"));
+
+  ipcMain.handle("get-reasoning-effort", createSafeIpcHandler(async () => {
+    try {
+      const effort = await getStoreValue("reasoning-effort", "medium");
+      return { success: true, data: { reasoningEffort: effort } };
+    } catch (error: any) {
+      console.error("Error getting reasoning_effort:", error);
+      return { success: false, error: "Failed to get reasoning_effort" };
+    }
+  }, "get-reasoning-effort"));
+
+  // ============================================================================
   // Usage Counter Handlers
   // ============================================================================
   ipcMain.handle("get-app-open-count", createSafeIpcHandler(async () => {
