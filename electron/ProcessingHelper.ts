@@ -899,8 +899,7 @@ export class ProcessingHelper {
       const useTwoStepProcessing = provider === "groq" && 
                                     optimizedScreenshots.length > 0 &&
                                     visionModel && textModel && 
-                                    visionModel !== textModel &&
-                                    !this.isGroqVisionModel(model);
+                                    visionModel !== textModel;
 
       if (useTwoStepProcessing) {
         // TWO-STEP PROCESSING: Vision model analyzes screenshots, text model generates response
@@ -1329,8 +1328,7 @@ export class ProcessingHelper {
       const textModel = await this.deps.getTextModel();
       const useTwoStepProcessing = provider === "groq" && 
                                     visionModel && textModel && 
-                                    visionModel !== textModel &&
-                                    !this.isGroqVisionModel(model);
+                                    visionModel !== textModel;
 
       if (useTwoStepProcessing) {
         // TWO-STEP PROCESSING: Vision model analyzes, text model generates response
@@ -1862,8 +1860,7 @@ export class ProcessingHelper {
       const textModel = await this.deps.getTextModel();
       const useTwoStepProcessing = provider === "groq" && 
                                     visionModel && textModel && 
-                                    visionModel !== textModel &&
-                                    !this.isGroqVisionModel(model);
+                                    visionModel !== textModel;
 
       if (useTwoStepProcessing) {
         // TWO-STEP PROCESSING for follow-up
