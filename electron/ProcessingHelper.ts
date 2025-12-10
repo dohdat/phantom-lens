@@ -122,13 +122,20 @@ export class ProcessingHelper {
   }
 
   /**
-   * Check if a Groq model supports vision
+   * Check if a Groq model is the configured vision model
+   * This dynamically checks against the actual vision model setting
    */
-  private isGroqVisionModel(model: string): boolean {
-    const visionModels = [
-      "meta-llama/llama-4-scout-17b-16e-instruct"
-    ];
-    return visionModels.includes(model);
+  private async isGroqVisionModel(model: string): Promise<boolean> {
+    try {
+      const visionModel = await this.deps.getVisionModel();
+      return visionModel === model;
+    } catch {
+      // Fallback to hardcoded list if settings unavailable
+      const knownVisionModels = [
+        "meta-llama/llama-4-scout-17b-16e-instruct"
+      ];
+      return knownVisionModels.includes(model);
+    }
   }
 
   /**
@@ -143,8 +150,9 @@ export class ProcessingHelper {
     base64Images?: string[]
   ): Promise<string> {
     // Build message content based on whether images are provided
+    const isVisionModel = await this.isGroqVisionModel(model);
     let messageContent: any;
-    if (base64Images && base64Images.length > 0 && this.isGroqVisionModel(model)) {
+    if (base64Images && base64Images.length > 0 && isVisionModel) {
       // Multi-modal content with images
       messageContent = [
         {
@@ -167,26 +175,33 @@ export class ProcessingHelper {
     const maxCompletionTokens = parseInt(process.env.MAX_COMPLETION_TOKENS || "8192");
     const reasoningEffort = process.env.REASONING_EFFORT || "medium";
 
+    // Build request body - only include reasoning_effort for non-vision models
+    const requestBody: any = {
+      model: model,
+      messages: [
+        {
+          role: 'user',
+          content: messageContent
+        }
+      ],
+      temperature: 1,
+      max_completion_tokens: maxCompletionTokens,
+      top_p: 1,
+      stream: true
+    };
+
+    // Only add reasoning_effort for non-vision models (text/reasoning models)
+    if (!isVisionModel) {
+      requestBody.reasoning_effort = reasoningEffort;
+    }
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          {
-            role: 'user',
-            content: messageContent
-          }
-        ],
-        temperature: 1,
-        max_completion_tokens: maxCompletionTokens,
-        reasoning_effort: reasoningEffort,
-        top_p: 1,
-        stream: true
-      }),
+      body: JSON.stringify(requestBody),
       signal
     });
 
@@ -1022,8 +1037,8 @@ export class ProcessingHelper {
       }
 
       // Check if using Groq with a non-vision model (without two-step)
-      if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
+      if (provider === "groq" && !(await this.isGroqVisionModel(model))) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use a vision model or enable two-step processing with separate vision/text models.`);
       }
 
       if (provider === "groq") {
@@ -1495,8 +1510,8 @@ export class ProcessingHelper {
       }
 
       // Check if using Groq with a non-vision model (without two-step)
-      if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
+      if (provider === "groq" && !(await this.isGroqVisionModel(model))) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use a vision model or enable two-step processing with separate vision/text models.`);
       }
 
       if (provider === "groq") {
@@ -1951,20 +1966,18 @@ export class ProcessingHelper {
           finalPrompt,
           apiKey,
           textModel,
-          signal
-        );
+        signal
+      );
       }
 
       // Check if using Groq with a non-vision model (without two-step)
-      if (provider === "groq" && !this.isGroqVisionModel(model)) {
-        throw new Error(`Groq model ${model} does not support image analysis. Please use 'meta-llama/llama-4-scout-17b-16e-instruct' for vision tasks or enable two-step processing with separate vision/text models.`);
+      if (provider === "groq" && !(await this.isGroqVisionModel(model))) {
+        throw new Error(`Groq model ${model} does not support image analysis. Please use a vision model or enable two-step processing with separate vision/text models.`);
       }
 
       if (provider === "groq") {
         // Use Groq API for vision follow-up
-        console.log(`[Groq] Processing follow-up screenshots with vision model: ${model}`);
-
-        // Try to get custom system prompt from settings
+        console.log(`[Groq] Processing follow-up screenshots with vision model: ${model}`);        // Try to get custom system prompt from settings
         let customPrompt: string | null = null;
         try {
           customPrompt = await this.deps.getSystemPrompt();
