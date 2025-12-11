@@ -27,6 +27,7 @@
 #include <atomic>
 #include <thread>
 #include <csignal>
+#include <cstdlib>
 
 #include "audio_capture.h"
 #include "whisper_wrapper.h"
@@ -36,6 +37,8 @@ namespace {
     std::atomic<bool> g_shouldExit{false};
     phantom::AudioCapture* g_audioCapture = nullptr;
     phantom::WhisperWrapper* g_whisper = nullptr;
+    bool g_disableWhisper = false;
+    bool g_streamAudio = false;
 }
 
 void signalHandler(int signal) {
@@ -64,18 +67,23 @@ void stdinLoop() {
         switch (cmd.type) {
             case phantom::CommandType::Start:
                 std::cerr << "[Main] Received start command" << std::endl;
-                if (g_audioCapture && g_whisper) {
-                    // Start whisper first
-                    g_whisper->start([](const std::string& text, bool isFinal) {
-                        if (isFinal) {
-                            phantom::sendFinal(text);
-                        } else {
-                            phantom::sendPartial(text);
-                        }
-                    });
+                if (g_audioCapture) {
+                    // Start whisper first (if enabled)
+                    if (g_whisper) {
+                        g_whisper->start([](const std::string& text, bool isFinal) {
+                            if (isFinal) {
+                                phantom::sendFinal(text);
+                            } else {
+                                phantom::sendPartial(text);
+                            }
+                        });
+                    }
 
                     // Start audio capture
                     bool started = g_audioCapture->start([](const float* samples, size_t numSamples) {
+                        if (g_streamAudio) {
+                            phantom::sendAudioChunk(samples, numSamples);
+                        }
                         if (g_whisper) {
                             g_whisper->addAudioChunk(samples, numSamples);
                         }
@@ -87,7 +95,7 @@ void stdinLoop() {
                         phantom::sendError(g_audioCapture->getLastError());
                     }
                 } else {
-                    phantom::sendError("Audio capture or Whisper not initialized");
+                    phantom::sendError("Audio capture not initialized");
                 }
                 break;
 
@@ -120,15 +128,21 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     std::cerr << "[Main] phantom-audio starting..." << std::endl;
+    g_disableWhisper = std::getenv("DISABLE_WHISPER") != nullptr;
+    g_streamAudio = std::getenv("STREAM_AUDIO") != nullptr;
 
     // Parse command line arguments
     std::string modelPath = parseModelPath(argc, argv);
-    if (modelPath.empty()) {
+    if (!g_disableWhisper && modelPath.empty()) {
         phantom::sendError("No model path specified. Use --model <path>");
         return 1;
     }
 
-    std::cerr << "[Main] Model path: " << modelPath << std::endl;
+    if (!g_disableWhisper) {
+        std::cerr << "[Main] Model path: " << modelPath << std::endl;
+    } else {
+        std::cerr << "[Main] Whisper disabled; capture-only mode" << std::endl;
+    }
 
     // Initialize audio capture
     g_audioCapture = new phantom::AudioCapture();
@@ -138,13 +152,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Initialize Whisper
-    g_whisper = new phantom::WhisperWrapper();
-    if (!g_whisper->loadModel(modelPath)) {
-        phantom::sendError("Failed to load Whisper model: " + g_whisper->getLastError());
-        delete g_audioCapture;
-        delete g_whisper;
-        return 1;
+    // Initialize Whisper (unless disabled for cloud forwarding)
+    if (!g_disableWhisper) {
+        g_whisper = new phantom::WhisperWrapper();
+        if (!g_whisper->loadModel(modelPath)) {
+            phantom::sendError("Failed to load Whisper model: " + g_whisper->getLastError());
+            delete g_audioCapture;
+            delete g_whisper;
+            return 1;
+        }
     }
 
     // Signal that we're ready

@@ -172,6 +172,16 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  // Whisper Configuration
+  getWhisperConfig: () => Promise<{
+    success: boolean;
+    data?: { mode: "local" | "cloud"; modelPath: string | null; groqModel: string };
+    error?: string;
+  }>;
+  setWhisperConfig: (config: { mode?: "local" | "cloud"; modelPath?: string; groqModel?: string }) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
   // Whisper Model
   getWhisperModelPath: () => Promise<{
     success: boolean;
@@ -528,6 +538,10 @@ const electronAPI = {
   setVisionModel: (model: string) => ipcRenderer.invoke("set-vision-model", model),
   getTextModel: () => ipcRenderer.invoke("get-text-model"),
   setTextModel: (model: string) => ipcRenderer.invoke("set-text-model", model),
+  // Whisper Configuration
+  getWhisperConfig: () => ipcRenderer.invoke("get-whisper-config"),
+  setWhisperConfig: (config: { mode?: "local" | "cloud"; modelPath?: string; groqModel?: string }) =>
+    ipcRenderer.invoke("set-whisper-config", config),
   // Whisper Model
   getWhisperModelPath: () => ipcRenderer.invoke("get-whisper-model-path"),
   setWhisperModelPath: (modelPath: string) => ipcRenderer.invoke("set-whisper-model-path", modelPath),

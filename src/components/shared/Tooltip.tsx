@@ -120,6 +120,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   // Vision model state (for two-step processing)
   const [visionModel, setVisionModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct");
   // Whisper model state
+  const [whisperMode, setWhisperMode] = useState<"local" | "cloud">("local");
+  const [groqWhisperModel, setGroqWhisperModel] = useState("whisper-large-v3");
   const [whisperModelPath, setWhisperModelPath] = useState("");
   // Groq API parameters
   const [maxCompletionTokens, setMaxCompletionTokens] = useState("8192");
@@ -249,20 +251,36 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         console.warn("Failed to load vision model:", e);
       }
 
-      // Load Whisper model path
+      // Load Whisper settings (mode + models)
       try {
-        const whisperModelPathResponse = await window.electronAPI.getWhisperModelPath?.();
-        if (whisperModelPathResponse?.success && whisperModelPathResponse.data?.modelPath) {
-          setWhisperModelPath(whisperModelPathResponse.data.modelPath);
+        const whisperConfigResponse = await window.electronAPI.getWhisperConfig?.();
+        if (whisperConfigResponse?.success && whisperConfigResponse.data) {
+          const { mode, modelPath, groqModel } = whisperConfigResponse.data;
+          if (mode === "cloud" || mode === "local") {
+            setWhisperMode(mode);
+          }
+          if (modelPath) {
+            setWhisperModelPath(modelPath);
+          }
+          if (groqModel) {
+            setGroqWhisperModel(groqModel);
+          }
         } else {
-          // Load default path for display
-          const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
-          if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
-            setWhisperModelPath(defaultPathResponse.data.modelPath);
+          // Fallback to legacy handlers
+          const whisperModelPathResponse = await window.electronAPI.getWhisperModelPath?.();
+          if (whisperModelPathResponse?.success && whisperModelPathResponse.data?.modelPath) {
+            setWhisperModelPath(whisperModelPathResponse.data.modelPath);
+          } else {
+            // Load default path for display
+            const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
+            if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
+              setWhisperModelPath(defaultPathResponse.data.modelPath);
+            }
           }
         }
+        setGroqWhisperModel(prev => prev || "whisper-large-v3");
       } catch (e) {
-        console.warn("Failed to load Whisper model path:", e);
+        console.warn("Failed to load Whisper configuration:", e);
       }
 
       // Load Groq API parameters
@@ -500,6 +518,33 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       setIsLoading(false);
     }
   }, [apiKey, selectedModel, selectedProvider, maxCompletionTokens, reasoningEffort, loadCurrentConfig]);
+
+  const handleSaveWhisperConfig = useCallback(async () => {
+    if (!isInteractive) return;
+    setError(null);
+
+    try {
+      const payload: { mode: "local" | "cloud"; modelPath?: string; groqModel?: string } = {
+        mode: whisperMode,
+        groqModel: groqWhisperModel
+      };
+
+      if (whisperMode === "local" || whisperModelPath.trim()) {
+        payload.modelPath = whisperModelPath;
+      }
+
+      const response = await window.electronAPI.setWhisperConfig?.(payload);
+
+      if (response?.success) {
+        await loadCurrentConfig();
+      } else {
+        setError(response?.error || "Failed to save whisper configuration");
+      }
+    } catch (err) {
+      console.error("Error saving whisper configuration:", err);
+      setError("Failed to save whisper configuration");
+    }
+  }, [isInteractive, whisperMode, whisperModelPath, groqWhisperModel, loadCurrentConfig]);
 
   // Reset scroll position when tooltip opens and auto-focus API key input
   useEffect(() => {
@@ -1380,69 +1425,122 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
 
             {/* Whisper Model Configuration */}
             <div className="mb-4">
-              <h3 className="text-sm font-medium text-white mb-2 text-center">Whisper Model Path</h3>
+              <h3 className="text-sm font-medium text-white mb-2 text-center">Whisper Transcription</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-white/70 mb-1 text-center">Model File Path</label>
-                  <input
-                    type="text"
-                    value={whisperModelPath}
-                    onChange={(e) => {
-                      if (!isInteractive) return;
-                      setWhisperModelPath(e.target.value);
-                    }}
-                    disabled={!isInteractive}
-                    tabIndex={isInteractive ? 0 : -1}
-                    placeholder="ggml-small.en-q8_0.bin or C:\\full\\path\\to\\model.bin"
-                    className={`w-full px-4 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
-                      isInteractive 
-                        ? 'focus:outline-none focus:ring-2 focus:ring-green-500/20' 
-                        : 'cursor-default'
-                    }`}
-                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                  />
+                  <label className="block text-xs text-white/70 mb-1 text-center">Mode</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        if (!isInteractive) return;
+                        setWhisperMode("local");
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${whisperMode === "local" ? (isTransparent ? 'text-white' : 'bg-green-500/20 text-green-100 border border-green-500/40') : (isTransparent ? 'text-white/70' : 'bg-white/10 text-white/80 border border-white/10')} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: whisperMode === "local" ? 'rgba(34,197,94,0.1)' : 'transparent', border: whisperMode === "local" ? '1px solid rgba(34,197,94,0.4)' : 'none' } : {}}
+                    >
+                      Local (whisper.cpp)
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isInteractive) return;
+                        setWhisperMode("cloud");
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${whisperMode === "cloud" ? (isTransparent ? 'text-white' : 'bg-blue-500/20 text-blue-100 border border-blue-500/40') : (isTransparent ? 'text-white/70' : 'bg-white/10 text-white/80 border border-white/10')} ${!isInteractive ? 'cursor-default' : ''}`}
+                      style={isTransparent ? { background: whisperMode === "cloud" ? 'rgba(59,130,246,0.12)' : 'transparent', border: whisperMode === "cloud" ? '1px solid rgba(59,130,246,0.4)' : 'none' } : {}}
+                    >
+                      Cloud (Groq Whisper)
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={async () => {
-                      if (!isInteractive) return;
-                      try {
-                        await window.electronAPI.setWhisperModelPath?.(whisperModelPath);
-                        console.log("Whisper model path saved");
-                      } catch (e) {
-                        console.error("Failed to save Whisper model path:", e);
-                      }
-                    }}
-                    disabled={!isInteractive}
-                    tabIndex={isInteractive ? 0 : -1}
-                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-green-500/20 text-green-200 border border-green-500/30 hover:bg-green-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
-                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                  >
-                    Save Model Path
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (!isInteractive) return;
-                      try {
-                        const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
-                        if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
-                          setWhisperModelPath(defaultPathResponse.data.modelPath);
-                        }
-                      } catch (e) {
-                        console.error("Failed to load default Whisper model path:", e);
-                      }
-                    }}
-                    disabled={!isInteractive}
-                    tabIndex={isInteractive ? 0 : -1}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
-                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
-                  >
-                    Reset to Default
-                  </button>
-                </div>
-                <p className="text-[10px] text-white/50 leading-relaxed text-center">
-                  Specify a Whisper model filename (e.g., ggml-base.en.bin, ggml-small.en-q8_0.bin) or full path. The model will be automatically downloaded from Hugging Face if it doesn't exist. Leave empty to use default.
-                </p>
+
+                {whisperMode === "local" ? (
+                  <>
+                    <div>
+                      <label className="block text-xs text-white/70 mb-1 text-center">Model File Path</label>
+                      <input
+                        type="text"
+                        value={whisperModelPath}
+                        onChange={(e) => {
+                          if (!isInteractive) return;
+                          setWhisperModelPath(e.target.value);
+                        }}
+                        disabled={!isInteractive}
+                        tabIndex={isInteractive ? 0 : -1}
+                        placeholder="ggml-small.en-q8_0.bin or C:\\full\\path\\to\\model.bin"
+                        className={`w-full px-4 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                          isInteractive 
+                            ? 'focus:outline-none focus:ring-2 focus:ring-green-500/20' 
+                            : 'cursor-default'
+                        }`}
+                        style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          if (!isInteractive) return;
+                          try {
+                            const defaultPathResponse = await window.electronAPI.getDefaultWhisperModelPath?.();
+                            if (defaultPathResponse?.success && defaultPathResponse.data?.modelPath) {
+                              setWhisperModelPath(defaultPathResponse.data.modelPath);
+                            }
+                          } catch (e) {
+                            console.error("Failed to load default Whisper model path:", e);
+                          }
+                        }}
+                        disabled={!isInteractive}
+                        tabIndex={isInteractive ? 0 : -1}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white/70' : 'text-white/70 border border-white/20 hover:bg-white/10'} ${!isInteractive ? 'cursor-default' : ''}`}
+                        style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                      >
+                        Reset to Default
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-white/50 leading-relaxed text-center">
+                      Specify a Whisper model filename (e.g., ggml-base.en.bin, ggml-small.en-q8_0.bin) or full path. The model will be automatically downloaded from Hugging Face if it doesn't exist. Leave empty to use default.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs text-white/70 mb-1 text-center">Groq Whisper Model</label>
+                      <input
+                        type="text"
+                        value={groqWhisperModel}
+                        onChange={(e) => {
+                          if (!isInteractive) return;
+                          setGroqWhisperModel(e.target.value);
+                        }}
+                        disabled={!isInteractive}
+                        tabIndex={isInteractive ? 0 : -1}
+                        placeholder="whisper-large-v3"
+                        className={`w-full px-4 py-2 rounded-lg text-white text-xs placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                          isInteractive 
+                            ? 'focus:outline-none focus:ring-2 focus:ring-blue-500/20' 
+                            : 'cursor-default'
+                        }`}
+                        style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                      />
+                    </div>
+                    <p className="text-[10px] text-white/50 leading-relaxed text-center">
+                      Uses Groq&apos;s cloud Whisper endpoint with your Groq API key from the provider settings above. Audio is sent to Groq for transcription instead of running locally.
+                    </p>
+                  </>
+                )}
+
+                <button
+                  onClick={handleSaveWhisperConfig}
+                  disabled={!isInteractive}
+                  tabIndex={isInteractive ? 0 : -1}
+                  className={`w-full px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-green-500/20 text-green-200 border border-green-500/30 hover:bg-green-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                  style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                >
+                  Save Whisper Settings
+                </button>
               </div>
             </div>
 

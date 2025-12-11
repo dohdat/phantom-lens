@@ -1195,6 +1195,72 @@ Your response:`;
   // ============================================================================
   // Whisper Model Handlers
   // ============================================================================
+  ipcMain.handle("get-whisper-config", createSafeIpcHandler(async () => {
+    try {
+      const mode = (await getStoreValue("whisper-mode")) || "local";
+      const storedPath = await getStoreValue("whisper-model-path");
+      const groqModel = (await getStoreValue("whisper-groq-model")) || "whisper-large-v3";
+
+      let modelPath: string | null = null;
+      if (storedPath && typeof storedPath === "string" && storedPath.trim()) {
+        modelPath = storedPath.trim();
+      } else {
+        const { SystemAudioHelper } = await import("./SystemAudioHelper");
+        modelPath = SystemAudioHelper.getDefaultModelPath();
+      }
+
+      return { 
+        success: true, 
+        data: { 
+          mode: mode === "cloud" ? "cloud" : "local",
+          modelPath, 
+          groqModel 
+        } 
+      };
+    } catch (error: any) {
+      console.error("Error getting whisper config:", error);
+      return { success: false, error: "Failed to get whisper configuration" };
+    }
+  }, "get-whisper-config"));
+
+  ipcMain.handle("set-whisper-config", createSafeIpcHandler(async (
+    _event: any,
+    config: { mode?: "local" | "cloud"; modelPath?: string; groqModel?: string }
+  ) => {
+    try {
+      const mode: "local" | "cloud" = config?.mode === "cloud" ? "cloud" : "local";
+      const modelPath = typeof config?.modelPath === "string" ? config.modelPath.trim() : undefined;
+      const groqModel = (config?.groqModel || "whisper-large-v3").trim();
+
+      const results: boolean[] = [];
+      results.push(await setStoreValue("whisper-mode", mode));
+
+      // Preserve previous model path if none provided (so switching modes doesn't wipe it)
+      if (modelPath !== undefined) {
+        results.push(await setStoreValue("whisper-model-path", modelPath));
+      }
+
+      if (groqModel) {
+        results.push(await setStoreValue("whisper-groq-model", groqModel));
+      }
+
+      if (!results.every(Boolean)) {
+        return { success: false, error: "Failed to save whisper configuration" };
+      }
+
+      process.env.WHISPER_MODE = mode;
+      if (groqModel) {
+        process.env.WHISPER_GROQ_MODEL = groqModel;
+      }
+
+      console.log(`[Whisper] Config saved - mode=${mode}, modelPath=${modelPath || "[unchanged]"}, groqModel=${groqModel}`);
+      return { success: true, data: { mode, modelPath: modelPath ?? null, groqModel } };
+    } catch (error: any) {
+      console.error("Error setting whisper config:", error);
+      return { success: false, error: "Failed to save whisper configuration" };
+    }
+  }, "set-whisper-config"));
+
   ipcMain.handle("get-whisper-model-path", createSafeIpcHandler(async () => {
     try {
       const modelPath = await getStoreValue("whisper-model-path");

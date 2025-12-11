@@ -8,9 +8,10 @@ import { BrowserWindow, ipcMain, app } from "electron";
 import path from "path";
 import fs from "fs";
 import https from "https";
+import { Buffer } from "buffer";
 
 interface TranscriptMessage {
-  type: "ready" | "started" | "stopped" | "partial" | "final" | "error";
+  type: "ready" | "started" | "stopped" | "partial" | "final" | "error" | "audio";
   text?: string;
   message?: string;
 }
@@ -33,6 +34,10 @@ export class SystemAudioHelper {
   private idleTimer: NodeJS.Timeout | null = null;
   private lastStopTime: number | null = null;
   private static readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  private isCloudMode: boolean = false;
+  private groqModel: string | null = null;
+  private groqApiKey: string | null = null;
+  private cloudAudioBuffers: Buffer[] = [];
 
   constructor() {}
 
@@ -153,6 +158,34 @@ export class SystemAudioHelper {
   }
 
   /**
+   * Get whisper mode + config (local vs cloud)
+   */
+  private async getWhisperModeConfig(): Promise<{
+    mode: "local" | "cloud";
+    modelPath: string;
+    groqModel: string;
+    apiKey: string | null;
+  }> {
+    try {
+      const { getStoreValue } = await import("./main");
+      const modeRaw = await getStoreValue("whisper-mode");
+      const mode: "local" | "cloud" = modeRaw === "cloud" ? "cloud" : "local";
+      const groqModel = (await getStoreValue("whisper-groq-model")) || "whisper-large-v3";
+      const apiKey = (await getStoreValue("api-key")) || null;
+      const modelPath = await this.getModelPath();
+      return { mode, modelPath, groqModel, apiKey };
+    } catch (error) {
+      console.warn("[SystemAudio] Failed to load whisper config, defaulting to local:", error);
+      return {
+        mode: "local",
+        modelPath: await this.getModelPath(),
+        groqModel: "whisper-large-v3",
+        apiKey: null,
+      };
+    }
+  }
+
+  /**
    * Download the Whisper model if missing
    * Automatically constructs the download URL based on the model filename
    */
@@ -244,9 +277,72 @@ export class SystemAudioHelper {
   }
 
   /**
+   * Call Groq Whisper API with captured audio
+   */
+  private async transcribeWithGroq(audio: Buffer, model: string, apiKey: string): Promise<string> {
+    const endpoint = "https://api.groq.com/openai/v1/audio/transcriptions";
+
+    const wavBuffer = this.toWaveBuffer(audio);
+    const blob = new Blob([wavBuffer], { type: "audio/wav" });
+    const formData = new FormData();
+    formData.append("file", blob, "audio.wav");
+    formData.append("model", model || "whisper-large-v3");
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData as any,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq whisper failed (${response.status}): ${errorText}`);
+    }
+
+    const data = (await response.json()) as { text?: string; error?: string };
+    if (!data?.text) {
+      throw new Error(data?.error || "No transcript returned");
+    }
+
+    return data.text.trim();
+  }
+
+  /**
+   * Convert raw float32 mono PCM to a minimal WAV buffer
+   */
+  private toWaveBuffer(pcm: Buffer): Buffer {
+    const sampleRate = 16000;
+    const numChannels = 1;
+    const bitsPerSample = 32;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataSize = pcm.length;
+    const buffer = Buffer.alloc(44 + dataSize);
+
+    buffer.write("RIFF", 0);
+    buffer.writeUInt32LE(36 + dataSize, 4);
+    buffer.write("WAVE", 8);
+    buffer.write("fmt ", 12);
+    buffer.writeUInt32LE(16, 16); // PCM header size
+    buffer.writeUInt16LE(3, 20); // WAVE_FORMAT_IEEE_FLOAT
+    buffer.writeUInt16LE(numChannels, 22);
+    buffer.writeUInt32LE(sampleRate, 24);
+    buffer.writeUInt32LE(byteRate, 28);
+    buffer.writeUInt16LE(blockAlign, 32);
+    buffer.writeUInt16LE(bitsPerSample, 34);
+    buffer.write("data", 36);
+    buffer.writeUInt32LE(dataSize, 40);
+    pcm.copy(buffer, 44);
+
+    return buffer;
+  }
+
+  /**
    * Check if required files exist, download model if missing
    */
-  private async checkRequirements(): Promise<{ valid: boolean; error?: string }> {
+  private async checkRequirements(requireModel: boolean = true): Promise<{ valid: boolean; error?: string }> {
     const exePath = this.getExecutablePath();
     const modelPath = await this.getModelPath();
 
@@ -257,16 +353,18 @@ export class SystemAudioHelper {
       };
     }
 
-    // Check if model exists, download if missing
-    if (!fs.existsSync(modelPath)) {
-      console.log(`[SystemAudio] Whisper model not found at: ${modelPath}. Downloading...`);
-      try {
-        await this.downloadModel(modelPath);
-      } catch (error: any) {
-        return {
-          valid: false,
-          error: `Failed to download Whisper model: ${error.message || String(error)}`,
-        };
+    if (requireModel) {
+      // Check if model exists, download if missing
+      if (!fs.existsSync(modelPath)) {
+        console.log(`[SystemAudio] Whisper model not found at: ${modelPath}. Downloading...`);
+        try {
+          await this.downloadModel(modelPath);
+        } catch (error: any) {
+          return {
+            valid: false,
+            error: `Failed to download Whisper model: ${error.message || String(error)}`,
+          };
+        }
       }
     }
 
@@ -330,7 +428,7 @@ export class SystemAudioHelper {
 
     // Check if system audio is available
     ipcMain.handle("system-audio:check-availability", async () => {
-      const check = await this.checkRequirements();
+      const check = await this.checkRequirements(false);
       return {
         success: check.valid,
         available: check.valid,
@@ -346,6 +444,16 @@ export class SystemAudioHelper {
     // Clear any pending idle timer since we're starting again
     this.clearIdleTimer();
 
+    const whisperConfig = await this.getWhisperModeConfig();
+    this.isCloudMode = whisperConfig.mode === "cloud";
+    this.groqModel = whisperConfig.groqModel;
+    this.groqApiKey = whisperConfig.apiKey;
+    this.cloudAudioBuffers = [];
+
+    if (this.isCloudMode && !this.groqApiKey) {
+      throw new Error("Groq API key is missing. Set it in Settings before enabling cloud whisper.");
+    }
+
     if (this.audioProcess) {
       if (this.state.isCapturing) {
         console.log("[SystemAudio] Already capturing");
@@ -356,13 +464,13 @@ export class SystemAudioHelper {
       return;
     }
 
-    const check = await this.checkRequirements();
+    const check = await this.checkRequirements(!this.isCloudMode);
     if (!check.valid) {
       throw new Error(check.error);
     }
 
     const execPath = this.getExecutablePath();
-    const modelPath = await this.getModelPath();
+    const modelPath = whisperConfig.modelPath;
 
     console.log("[SystemAudio] Starting phantom-audio process");
     console.log("[SystemAudio] Executable:", execPath);
@@ -370,8 +478,20 @@ export class SystemAudioHelper {
 
     return new Promise((resolve, reject) => {
       try {
+        const env = {
+          ...process.env,
+        } as Record<string, string>;
+
+        if (this.isCloudMode) {
+          env.DISABLE_WHISPER = "1";
+          env.STREAM_AUDIO = "1";
+        } else {
+          env.STREAM_AUDIO = "1"; // keep audio stream available for future use
+        }
+
         this.audioProcess = spawn(execPath, ["--model", modelPath], {
           stdio: ["pipe", "pipe", "pipe"],
+          env,
         });
 
         this.dataBuffer = "";
@@ -429,9 +549,7 @@ export class SystemAudioHelper {
    * Starts an idle timer to shutdown after IDLE_TIMEOUT_MS if not restarted
    */
   async stop(): Promise<void> {
-    if (!this.audioProcess) {
-      return;
-    }
+    if (!this.audioProcess) return;
 
     this.sendCommand({ cmd: "stop" });
     this.lastStopTime = Date.now();
@@ -466,7 +584,7 @@ export class SystemAudioHelper {
 
   /**
    * Shutdown the audio process completely
-   */
+  */
   async shutdown(): Promise<void> {
     this.clearIdleTimer();
     
@@ -517,7 +635,9 @@ export class SystemAudioHelper {
 
       try {
         const msg: TranscriptMessage = JSON.parse(line);
-        this.handleMessage(msg);
+        this.handleMessage(msg).catch((error) => {
+          console.error("[SystemAudio] Failed to handle message:", error);
+        });
       } catch (error) {
         console.warn("[SystemAudio] Failed to parse message:", line);
       }
@@ -527,7 +647,7 @@ export class SystemAudioHelper {
   /**
    * Handle a parsed message from the audio process
    */
-  private handleMessage(msg: TranscriptMessage): void {
+  private async handleMessage(msg: TranscriptMessage): Promise<void> {
     console.log("[SystemAudio] Message:", msg.type, msg.text || msg.message || "");
 
     switch (msg.type) {
@@ -544,6 +664,28 @@ export class SystemAudioHelper {
       case "stopped":
         this.state.isCapturing = false;
         this.sendToRenderer("system-audio:stopped", {});
+
+        if (this.isCloudMode && this.cloudAudioBuffers.length && this.groqApiKey) {
+          try {
+            const audioBuffer = Buffer.concat(this.cloudAudioBuffers);
+            this.cloudAudioBuffers = [];
+            const transcript = await this.transcribeWithGroq(
+              audioBuffer,
+              this.groqModel || "whisper-large-v3",
+              this.groqApiKey
+            );
+            if (transcript) {
+              this.sendToRenderer("system-audio:transcript", {
+                type: "final",
+                text: transcript,
+              });
+            }
+          } catch (error: any) {
+            console.error("[SystemAudio] Cloud transcription failed:", error);
+            this.state.lastError = error?.message || "Cloud transcription failed";
+            this.sendToRenderer("system-audio:error", { message: this.state.lastError });
+          }
+        }
         break;
 
       case "partial":
@@ -558,6 +700,17 @@ export class SystemAudioHelper {
           type: "final",
           text: msg.text || "",
         });
+        break;
+
+      case "audio":
+        if (this.isCloudMode && msg.text) {
+          try {
+            const buf = Buffer.from(msg.text, "base64");
+            this.cloudAudioBuffers.push(buf);
+          } catch (e) {
+            console.warn("[SystemAudio] Failed to decode audio chunk:", e);
+          }
+        }
         break;
 
       case "error":

@@ -3,6 +3,8 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <vector>
+#include <cstdint>
 
 namespace phantom {
 
@@ -105,6 +107,37 @@ void sendPartial(const std::string& text) {
 
 void sendFinal(const std::string& text) {
     std::cout << "{\"type\":\"final\",\"text\":\"" << escapeJson(text) << "\"}" << std::endl;
+    std::cout.flush();
+}
+
+// Basic base64 encoding (no line breaks)
+static std::string base64Encode(const uint8_t* data, size_t len) {
+    static const char* table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t triple = (data[i] << 16);
+        if (i + 1 < len) triple |= (data[i + 1] << 8);
+        if (i + 2 < len) triple |= data[i + 2];
+
+        out.push_back(table[(triple >> 18) & 0x3F]);
+        out.push_back(table[(triple >> 12) & 0x3F]);
+        out.push_back((i + 1 < len) ? table[(triple >> 6) & 0x3F] : '=');
+        out.push_back((i + 2 < len) ? table[triple & 0x3F] : '=');
+    }
+
+    return out;
+}
+
+void sendAudioChunk(const float* samples, size_t numSamples) {
+    if (!samples || numSamples == 0) return;
+
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(samples);
+    const size_t byteLength = numSamples * sizeof(float);
+    std::string encoded = base64Encode(bytes, byteLength);
+
+    std::cout << "{\"type\":\"audio\",\"text\":\"" << encoded << "\"}" << std::endl;
     std::cout.flush();
 }
 
