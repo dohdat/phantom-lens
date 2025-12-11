@@ -226,32 +226,56 @@ export class ProcessingHelper {
 
     const decoder = new TextDecoder();
     let fullText = '';
+    let bufferedLine = '';
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        // Accumulate partial lines to avoid losing tokens when JSON splits across chunks
+        bufferedLine += decoder.decode(value, { stream: true });
+        const lines = bufferedLine.split('\n');
+        bufferedLine = lines.pop() ?? '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                fullText += content;
-                if (onChunk) {
-                  onChunk(content);
-                }
+          const data = line.replace(/^data:\s*/, '');
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              fullText += content;
+              if (onChunk) {
+                onChunk(content);
               }
-            } catch (e) {
-              // Skip invalid JSON
             }
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      }
+
+      // Flush any remaining buffered data after the stream ends
+      const finalLine = bufferedLine.trim();
+      if (finalLine.startsWith('data:')) {
+        const data = finalLine.replace(/^data:\s*/, '');
+        if (data !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              fullText += content;
+              if (onChunk) {
+                onChunk(content);
+              }
+            }
+          } catch {
+            // Skip invalid JSON
           }
         }
       }
