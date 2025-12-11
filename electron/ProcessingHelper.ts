@@ -153,13 +153,15 @@ export class ProcessingHelper {
     const isVisionModel = await this.isGroqVisionModel(model);
     let messageContent: any;
     if (base64Images && base64Images.length > 0 && isVisionModel) {
+      // Groq vision models (like llama-4-scout-17b-16e-instruct) support up to 5 images
+      const imagesToSend = base64Images.slice(-5);
       // Multi-modal content with images
       messageContent = [
         {
           type: 'text',
           text: prompt
         },
-        ...base64Images.map(imageData => ({
+        ...imagesToSend.map(imageData => ({
           type: 'image_url',
           image_url: {
             url: `data:image/png;base64,${imageData}`
