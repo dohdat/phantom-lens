@@ -1097,6 +1097,44 @@ Your response:`;
   // ============================================================================
   // Audio Route Model Handlers
   // ============================================================================
+  ipcMain.handle("get-screenshot-interval-seconds", createSafeIpcHandler(async () => {
+    try {
+      const rawValue = await getStoreValue("screenshot-interval-seconds");
+      const parsed = typeof rawValue === "string" ? parseFloat(rawValue) : Number(rawValue);
+      const intervalSeconds = Number.isFinite(parsed) && parsed >= 0 ? parsed : 60;
+      return { success: true, data: { intervalSeconds } };
+    } catch (error: any) {
+      console.error("Error getting screenshot interval:", error);
+      return { success: false, error: "Failed to get screenshot interval" };
+    }
+  }, "get-screenshot-interval-seconds"));
+
+  ipcMain.handle("set-screenshot-interval-seconds", createSafeIpcHandler(async (
+    _event: any,
+    intervalSeconds: number
+  ) => {
+    try {
+      const parsed = typeof intervalSeconds === "string"
+        ? parseFloat(intervalSeconds as unknown as string)
+        : intervalSeconds;
+
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return { success: false, error: "Invalid interval. Use 0 or a positive number of seconds." };
+      }
+
+      const success = await setStoreValue("screenshot-interval-seconds", parsed);
+      if (!success) {
+        return { success: false, error: "Failed to save screenshot interval" };
+      }
+
+      console.log(`Screenshot interval set to ${parsed} seconds`);
+      return { success: true, data: { intervalSeconds: parsed } };
+    } catch (error: any) {
+      console.error("Error setting screenshot interval:", error);
+      return { success: false, error: "Failed to save screenshot interval" };
+    }
+  }, "set-screenshot-interval-seconds"));
+
   ipcMain.handle("get-audio-only-model", createSafeIpcHandler(async () => {
     try {
       const model = (await getStoreValue("audio-only-model")) || "gemini-2.5-flash";

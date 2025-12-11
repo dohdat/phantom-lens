@@ -34,6 +34,7 @@ describe('ShortcutsHelper', () => {
       moveWindowRight: jest.fn(),
       moveWindowUp: jest.fn(),
       moveWindowDown: jest.fn(),
+      getScreenshotIntervalSeconds: jest.fn().mockResolvedValue(60),
       scrollResponseBy: jest.fn(),
       scrollCodeBlockBy: jest.fn(),
       navigateHistoryPrev: jest.fn(),

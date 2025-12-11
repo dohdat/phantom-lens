@@ -10,7 +10,8 @@ const execFileAsync = promisify(execFile);
 export class ScreenshotHelper {
   private screenshotQueue: string[] = [];
   private extraScreenshotQueue: string[] = [];
-  private readonly MAX_SCREENSHOTS = 1;
+  // Keep a rolling window of recent screenshots for richer context
+  private readonly MAX_SCREENSHOTS = 20;
 
   private readonly screenshotDir: string;
   private readonly extraScreenshotDir: string;

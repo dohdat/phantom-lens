@@ -72,12 +72,17 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
   // Track which mode is being used for display
   const [captureMode, setCaptureMode] = useState<"audio-only" | "audio-screenshot">("audio-only");
+  const [screenshotCount, setScreenshotCount] = useState(0);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   
   // Ref to access current transcript in keyboard handler
   const transcriptRef = useRef("");
   const currentPartialRef = useRef("");
   const audioPromptRef = useRef(DEFAULT_AUDIO_PROMPT);
   const wasCapturingRef = useRef(false);
+  const isCapturingRef = useRef(false);
+  const recordingStartRef = useRef<number | null>(null);
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Track which mode was used to start recording: "audio-only" or "audio-screenshot"
   const captureModeRef = useRef<"audio-only" | "audio-screenshot">("audio-only");
 
@@ -85,6 +90,31 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
   useEffect(() => { currentPartialRef.current = currentPartial; }, [currentPartial]);
   useEffect(() => { audioPromptRef.current = audioPrompt; }, [audioPrompt]);
+  useEffect(() => { isCapturingRef.current = isCapturing; }, [isCapturing]);
+
+  const stopDurationTimer = useCallback(() => {
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+  }, []);
+
+  const startDurationTimer = useCallback(() => {
+    stopDurationTimer();
+    recordingStartRef.current = Date.now();
+    setRecordingDurationMs(0);
+    durationTimerRef.current = setInterval(() => {
+      if (recordingStartRef.current) {
+        setRecordingDurationMs(Date.now() - recordingStartRef.current);
+      }
+    }, 1000);
+  }, [stopDurationTimer]);
+
+  useEffect(() => {
+    return () => {
+      stopDurationTimer();
+    };
+  }, [stopDurationTimer]);
 
   // Load audio prompt from settings on mount
   useEffect(() => {
@@ -111,6 +141,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         const capturedPartial = currentPartialRef.current;
         const capturedPrompt = audioPromptRef.current;
         const capturedMode = captureModeRef.current;
+        isCapturingRef.current = false;
         
         // Hide indicator immediately
         setIsCapturing(false);
@@ -155,6 +186,11 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
           console.log("[MeetingAssistant] No transcript, sending screenshot only");
           await (window as any).electronAPI?.triggerProcessScreenshots();
         }
+
+        stopDurationTimer();
+        recordingStartRef.current = null;
+        setRecordingDurationMs(0);
+        setScreenshotCount(0);
       }
       
       wasCapturingRef.current = data.isCapturing;
@@ -164,6 +200,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         const mode = data.mode || "audio-only";
         captureModeRef.current = mode;
         setCaptureMode(mode);
+        isCapturingRef.current = true;
         
         try {
           const response = await (window as any).electronAPI?.getAudioPrompt?.();
@@ -179,6 +216,8 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         setError(null);
         setTranscript("");
         setCurrentPartial("");
+        setScreenshotCount(0);
+        startDurationTimer();
       }
     };
 
@@ -229,6 +268,18 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       cleanupError?.();
       cleanupTranscript?.();
     };
+  }, [startDurationTimer, stopDurationTimer]);
+
+  useEffect(() => {
+    const cleanup = (window as any).electronAPI?.onScreenshotTaken?.(() => {
+      if (isCapturingRef.current) {
+        setScreenshotCount((prev) => prev + 1);
+      }
+    });
+
+    return () => {
+      cleanup?.();
+    };
   }, []);
 
   const fullText = transcript + (currentPartial ? " " + currentPartial : "");
@@ -237,10 +288,26 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   // Only show when actively capturing - hide immediately when stopped
   const shouldShow = isCapturing || (showNotification && error);
 
+  const formatDuration = (ms: number) => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
+    }
+
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
   // Get just the last part of the transcript for display (last ~100 chars)
   const displayText = currentPartial || (transcript.length > 100 
     ? "..." + transcript.slice(-100) 
     : transcript);
+  const formattedDuration = formatDuration(recordingDurationMs);
 
   if (!shouldShow) {
     return null;
@@ -334,6 +401,14 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
             color: 'white'
           }}
         >
+          {isCapturing && (
+            <div className="text-white/60 text-[11px] mb-2 flex justify-between">
+              <span>Audio {formattedDuration}</span>
+              <span>
+                {screenshotCount} screenshot{Math.abs(screenshotCount) === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
           {error ? (
             <div className="text-red-300/80 text-xs">
               {error}

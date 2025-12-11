@@ -126,6 +126,7 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   // Groq API parameters
   const [maxCompletionTokens, setMaxCompletionTokens] = useState("8192");
   const [reasoningEffort, setReasoningEffort] = useState("medium");
+  const [screenshotIntervalSeconds, setScreenshotIntervalSeconds] = useState("60");
   // Update state - persist once shown
   const [updateInfo, setUpdateInfo] = useState<{
     updateAvailable: boolean;
@@ -239,6 +240,16 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         }
       } catch (e) {
         console.warn("Failed to load audio prompt:", e);
+      }
+
+      // Load auto screenshot interval
+      try {
+        const intervalResponse = await window.electronAPI.getScreenshotIntervalSeconds?.();
+        if (intervalResponse?.success && typeof intervalResponse.data?.intervalSeconds !== "undefined") {
+          setScreenshotIntervalSeconds(intervalResponse.data.intervalSeconds.toString());
+        }
+      } catch (e) {
+        console.warn("Failed to load screenshot interval:", e);
       }
 
       // Load vision and text models
@@ -518,6 +529,26 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       setIsLoading(false);
     }
   }, [apiKey, selectedModel, selectedProvider, maxCompletionTokens, reasoningEffort, loadCurrentConfig]);
+
+  const handleSaveScreenshotInterval = useCallback(async () => {
+    if (!isInteractive) return;
+
+    const parsed = parseFloat(screenshotIntervalSeconds);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setError("Screenshot interval must be 0 or greater.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await window.electronAPI.setScreenshotIntervalSeconds?.(parsed);
+      await loadCurrentConfig();
+    } catch (err) {
+      console.error("Error saving screenshot interval:", err);
+      setError("Failed to save screenshot interval");
+    }
+  }, [isInteractive, screenshotIntervalSeconds, loadCurrentConfig]);
 
   const handleSaveWhisperConfig = useCallback(async () => {
     if (!isInteractive) return;
@@ -1374,6 +1405,51 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Auto Screenshot Interval */}
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-white mb-2 text-center">Auto Screenshots (Meeting)</h3>
+              <div 
+                className={`space-y-2 rounded-lg p-3 ${isTransparent ? '' : 'bg-white/5 border border-white/10'}`}
+                style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+              >
+                <div>
+                  <label className="block text-xs text-white/70 mb-1 text-center">
+                    Interval (seconds) — 0 to disable
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={screenshotIntervalSeconds}
+                    onChange={(e) => {
+                      if (!isInteractive) return;
+                      setScreenshotIntervalSeconds(e.target.value);
+                    }}
+                    disabled={!isInteractive}
+                    tabIndex={isInteractive ? 0 : -1}
+                    className={`w-full px-3 py-2 rounded-lg text-white text-sm placeholder-white/50 transition-all duration-200 ${isTransparent ? '' : 'bg-white/10 border border-white/20'} ${
+                      isInteractive 
+                        ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' 
+                        : 'cursor-default'
+                    }`}
+                    style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                  />
+                </div>
+                <p className="text-[10px] text-white/50 leading-relaxed">
+                  Used when recording with Ctrl+Shift+S. Takes a screenshot immediately and then every interval while recording. Set to 0 seconds to disable automatic screenshots.
+                </p>
+                <button
+                  onClick={handleSaveScreenshotInterval}
+                  disabled={!isInteractive}
+                  tabIndex={isInteractive ? 0 : -1}
+                  className={`w-full px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${isTransparent ? 'text-white' : 'bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30'} ${!isInteractive ? 'cursor-default' : ''}`}
+                  style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                >
+                  Save Interval
+                </button>
+              </div>
             </div>
 
             {/* Vision Model Configuration */}

@@ -59,7 +59,7 @@ interface SystemAudioAPI {
   onError: (callback: (error: { message: string }) => void) => () => void;
   
   /** Subscribe to toggle events (from keyboard shortcuts) */
-  onToggled: (callback: (data: { isCapturing: boolean }) => void) => () => void;
+  onToggled: (callback: (data: { isCapturing: boolean; mode?: "audio-only" | "audio-screenshot" }) => void) => () => void;
 }
 
 declare global {

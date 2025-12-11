@@ -38,6 +38,17 @@ interface Window {
     triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>;
     processFollowUp: () => Promise<{ success: boolean; error?: string }>;
     processAudioTranscript: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+    processAudioWithScreenshot: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+    getScreenshotIntervalSeconds: () => Promise<{
+      success: boolean;
+      data?: { intervalSeconds: number };
+      error?: string;
+    }>;
+    setScreenshotIntervalSeconds: (intervalSeconds: number) => Promise<{
+      success: boolean;
+      data?: { intervalSeconds: number };
+      error?: string;
+    }>;
     // movement
     triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>;
     triggerMoveRight: () => Promise<{ success: boolean; error?: string }>;

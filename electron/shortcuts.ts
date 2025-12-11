@@ -5,9 +5,14 @@ import { systemAudioHelper } from "./SystemAudioHelper";
 export class ShortcutsHelper {
   private deps: IShortcutsHelperDeps;
   private shortcuts: { [key: string]: () => void } = {};
+  private autoScreenshotTimer: NodeJS.Timeout | null = null;
 
   constructor(deps: IShortcutsHelperDeps) {
     this.deps = deps;
+
+    this.stopAutoScreenshots = this.stopAutoScreenshots.bind(this);
+    this.startAutoScreenshotsIfEnabled = this.startAutoScreenshotsIfEnabled.bind(this);
+    this.captureAndAnnounceScreenshot = this.captureAndAnnounceScreenshot.bind(this);
 
     // Define all shortcuts and their handlers with NO CONFLICTS
     this.shortcuts = {
@@ -154,12 +159,14 @@ export class ShortcutsHelper {
         if (process.platform === "win32") {
           try {
             const isCapturing = await systemAudioHelper.toggle();
+            this.stopAutoScreenshots();
             console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"} (audio only mode)`);
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send("system-audio:toggled", { isCapturing, mode: "audio-only" });
             }
           } catch (error: any) {
+            this.stopAutoScreenshots();
             console.error("[SystemAudio] Toggle failed:", error);
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -179,11 +186,19 @@ export class ShortcutsHelper {
           try {
             const isCapturing = await systemAudioHelper.toggle();
             console.log(`[SystemAudio] Capture ${isCapturing ? "started" : "stopped"} (audio + screenshot mode)`);
+
+            if (isCapturing) {
+              await this.startAutoScreenshotsIfEnabled();
+            } else {
+              this.stopAutoScreenshots();
+            }
+
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send("system-audio:toggled", { isCapturing, mode: "audio-screenshot" });
             }
           } catch (error: any) {
+            this.stopAutoScreenshots();
             console.error("[SystemAudio] Toggle failed:", error);
             const mainWindow = this.deps.getMainWindow();
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -197,6 +212,55 @@ export class ShortcutsHelper {
         }
       },
     };
+  }
+
+  private stopAutoScreenshots(): void {
+    if (this.autoScreenshotTimer) {
+      clearInterval(this.autoScreenshotTimer);
+      this.autoScreenshotTimer = null;
+    }
+  }
+
+  private async captureAndAnnounceScreenshot(): Promise<void> {
+    if (!systemAudioHelper.isCapturing()) {
+      if (this.autoScreenshotTimer) {
+        this.stopAutoScreenshots();
+      }
+      return;
+    }
+
+    try {
+      const screenshotPath = await this.deps.takeScreenshot();
+      const mainWindow = this.deps.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("screenshot-taken", {
+          path: screenshotPath,
+        });
+      }
+    } catch (error) {
+      console.error("[Shortcuts] Auto screenshot failed:", error);
+    }
+  }
+
+  private async startAutoScreenshotsIfEnabled(): Promise<void> {
+    this.stopAutoScreenshots();
+
+    let intervalSeconds = 60;
+    try {
+      intervalSeconds = await this.deps.getScreenshotIntervalSeconds();
+    } catch (error) {
+      console.warn("[Shortcuts] Failed to load screenshot interval, using default 60s:", error);
+    }
+
+    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
+      return;
+    }
+
+    await this.captureAndAnnounceScreenshot();
+
+    this.autoScreenshotTimer = setInterval(() => {
+      this.captureAndAnnounceScreenshot();
+    }, intervalSeconds * 1000);
   }
 
   public registerAppShortcuts(): void {

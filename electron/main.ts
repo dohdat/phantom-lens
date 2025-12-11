@@ -365,6 +365,7 @@ export interface IShortcutsHelperDeps {
   moveWindowRight: () => void;
   moveWindowUp: () => void;
   moveWindowDown: () => void;
+  getScreenshotIntervalSeconds: () => Promise<number>;
   quitApplication: () => void;
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS;
   setHasFollowedUp: (value: boolean) => void;
@@ -922,6 +923,7 @@ function initializeHelpers() {
     moveWindowRight: () => moveWindowSmooth(state.step, 0),
     moveWindowUp: () => moveWindowSmooth(0, -state.step),
     moveWindowDown: () => moveWindowSmooth(0, state.step),
+    getScreenshotIntervalSeconds,
     quitApplication,
     PROCESSING_EVENTS: state.PROCESSING_EVENTS,
     setHasFollowedUp,
@@ -1468,6 +1470,20 @@ async function getAudioScreenshotModel(): Promise<string> {
   } catch (error) {
     console.error("Error getting audio-screenshot model from store:", error);
     return "gemini-2.5-flash";
+  }
+}
+
+async function getScreenshotIntervalSeconds(): Promise<number> {
+  try {
+    const rawValue = await getStoreValue("screenshot-interval-seconds");
+    const parsed = typeof rawValue === "string" ? parseFloat(rawValue) : Number(rawValue);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+    return 60;
+  } catch (error) {
+    console.error("Error getting screenshot interval from store:", error);
+    return 60;
   }
 }
 

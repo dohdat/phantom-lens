@@ -44,6 +44,16 @@ interface ElectronAPI {
   processFollowUp: () => Promise<{ success: boolean; error?: string }>;
   processAudioTranscript: (prompt: string) => Promise<{ success: boolean; error?: string }>;
   processAudioWithScreenshot: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+  getScreenshotIntervalSeconds: () => Promise<{
+    success: boolean;
+    data?: { intervalSeconds: number };
+    error?: string;
+  }>;
+  setScreenshotIntervalSeconds: (intervalSeconds: number) => Promise<{
+    success: boolean;
+    data?: { intervalSeconds: number };
+    error?: string;
+  }>;
   // movement
   triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>;
   triggerMoveRight: () => Promise<{ success: boolean; error?: string }>;
@@ -414,6 +424,8 @@ const electronAPI = {
   processFollowUp: () => ipcRenderer.invoke("process-follow-up"),
   processAudioTranscript: (prompt: string) => ipcRenderer.invoke("process-audio-transcript", prompt),
   processAudioWithScreenshot: (prompt: string) => ipcRenderer.invoke("process-audio-with-screenshot", prompt),
+  getScreenshotIntervalSeconds: () => ipcRenderer.invoke("get-screenshot-interval-seconds"),
+  setScreenshotIntervalSeconds: (intervalSeconds: number) => ipcRenderer.invoke("set-screenshot-interval-seconds", intervalSeconds),
   triggerMoveLeft: () => ipcRenderer.invoke("trigger-move-left"),
   triggerMoveRight: () => ipcRenderer.invoke("trigger-move-right"),
   triggerMoveUp: () => ipcRenderer.invoke("trigger-move-up"),
