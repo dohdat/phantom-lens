@@ -283,11 +283,8 @@ export class SystemAudioHelper {
     const endpoint = "https://api.groq.com/openai/v1/audio/transcriptions";
 
     const wavBuffer = this.toWaveBuffer(audio);
-    // Ensure we hand Blob an ArrayBuffer, not a Node Buffer type
-    const wavArrayBuffer = wavBuffer.buffer.slice(
-      wavBuffer.byteOffset,
-      wavBuffer.byteOffset + wavBuffer.byteLength
-    );
+    // Ensure we hand Blob a plain ArrayBuffer (not a SharedArrayBuffer union)
+    const wavArrayBuffer = Uint8Array.from(wavBuffer).buffer as ArrayBuffer;
     const blob = new Blob([wavArrayBuffer], { type: "audio/wav" });
     const formData = new FormData();
     formData.append("file", blob, "audio.wav");
