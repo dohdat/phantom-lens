@@ -38,6 +38,7 @@ export class SystemAudioHelper {
   private groqModel: string | null = null;
   private groqApiKey: string | null = null;
   private cloudAudioBuffers: Buffer[] = [];
+  private pendingCloudStopResolve: (() => void) | null = null;
 
   constructor() {}
 
@@ -553,9 +554,21 @@ export class SystemAudioHelper {
   async stop(): Promise<void> {
     if (!this.audioProcess) return;
 
+    let cloudStopPromise: Promise<void> | null = null;
+    if (this.isCloudMode) {
+      cloudStopPromise = new Promise<void>((resolve) => {
+        this.pendingCloudStopResolve = resolve;
+      });
+    }
+
     this.sendCommand({ cmd: "stop" });
     this.lastStopTime = Date.now();
     this.startIdleTimer();
+
+    if (cloudStopPromise) {
+      // Wait for cloud transcription to finish before returning
+      await cloudStopPromise;
+    }
   }
 
   /**
@@ -687,6 +700,11 @@ export class SystemAudioHelper {
             this.state.lastError = error?.message || "Cloud transcription failed";
             this.sendToRenderer("system-audio:error", { message: this.state.lastError });
           }
+        }
+
+        if (this.pendingCloudStopResolve) {
+          this.pendingCloudStopResolve();
+          this.pendingCloudStopResolve = null;
         }
         break;
 
