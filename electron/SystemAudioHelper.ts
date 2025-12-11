@@ -283,7 +283,12 @@ export class SystemAudioHelper {
     const endpoint = "https://api.groq.com/openai/v1/audio/transcriptions";
 
     const wavBuffer = this.toWaveBuffer(audio);
-    const blob = new Blob([wavBuffer], { type: "audio/wav" });
+    // Ensure we hand Blob an ArrayBuffer, not a Node Buffer type
+    const wavArrayBuffer = wavBuffer.buffer.slice(
+      wavBuffer.byteOffset,
+      wavBuffer.byteOffset + wavBuffer.byteLength
+    );
+    const blob = new Blob([wavArrayBuffer], { type: "audio/wav" });
     const formData = new FormData();
     formData.append("file", blob, "audio.wav");
     formData.append("model", model || "whisper-large-v3");
