@@ -79,6 +79,8 @@ describe('ProcessingHelper', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    delete process.env.API_PROVIDER;
+    delete process.env.API_KEY;
   });
 
   describe('cancelOngoingRequests', () => {
@@ -176,6 +178,103 @@ describe('ProcessingHelper', () => {
         { response: 'combined follow-up', isFollowUp: true }
       );
       expect(helper.isProcessing()).toBe(false);
+    });
+  });
+
+  describe('processExtraScreenshotsHelper', () => {
+    const validBase64 = Buffer.from('x'.repeat(256)).toString('base64');
+    const signal = new AbortController().signal;
+
+    it('returns API key error when missing', async () => {
+      process.env.API_PROVIDER = 'groq';
+      delete process.env.API_KEY;
+
+      await expect(
+        (helper as any).processExtraScreenshotsHelper(
+          [{ path: 'p', data: validBase64 }],
+          signal
+        )
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringMatching(/API key not found/i),
+        })
+      );
+    });
+
+    it('returns validation error when no valid base64 data is provided', async () => {
+      process.env.API_KEY = 'key';
+
+      await expect(
+        (helper as any).processExtraScreenshotsHelper(
+          [{ path: 'p', data: 'invalid' }],
+          signal
+        )
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringMatching(/Screenshot data is invalid|No valid screenshot data/i),
+        })
+      );
+    });
+
+    it('uses two-step Groq flow when vision/text models differ', async () => {
+      process.env.API_PROVIDER = 'groq';
+      process.env.API_KEY = 'key';
+      (deps.getConfiguredModel as jest.Mock).mockResolvedValue('groq-vision');
+      (deps.getVisionModel as jest.Mock).mockResolvedValue('vision-model');
+      (deps.getTextModel as jest.Mock).mockResolvedValue('text-model');
+
+      const analyzeSpy = jest
+        .spyOn<any, any>(helper as any, 'analyzeScreenshotsWithVision')
+        .mockResolvedValue('desc');
+      const streamSpy = jest
+        .spyOn<any, any>(helper as any, 'streamFollowupResponse')
+        .mockResolvedValue({ success: true, data: 'streamed' });
+
+      const result = await (helper as any).processExtraScreenshotsHelper(
+        [{ path: 'p', data: validBase64 }],
+        signal,
+        'prompt'
+      );
+
+      expect(analyzeSpy).toHaveBeenCalledWith(
+        [validBase64],
+        'key',
+        'vision-model',
+        signal,
+        'prompt'
+      );
+      expect(streamSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        'key',
+        'text-model',
+        signal
+      );
+      expect(result).toEqual({ success: true, data: 'streamed' });
+    });
+
+    it('reports unsupported Groq non-vision model without two-step support', async () => {
+      process.env.API_PROVIDER = 'groq';
+      process.env.API_KEY = 'key';
+      (deps.getConfiguredModel as jest.Mock).mockResolvedValue('text-only');
+      (deps.getVisionModel as jest.Mock).mockResolvedValue('text-only');
+      (deps.getTextModel as jest.Mock).mockResolvedValue('text-only');
+      jest
+        .spyOn<any, any>(helper as any, 'isGroqVisionModel')
+        .mockResolvedValue(false);
+
+      await expect(
+        (helper as any).processExtraScreenshotsHelper(
+          [{ path: 'p', data: validBase64 }],
+          signal
+        )
+      ).resolves.toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringMatching(/does not support image analysis/i),
+        })
+      );
     });
   });
 });
