@@ -130,15 +130,30 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
+  getDefaultSystemPrompt: () => Promise<{
+    success: boolean;
+    data?: { prompt: string };
+    error?: string;
+  }>;
   // Audio Prompt (for Meeting Assistant)
   getAudioPrompt: () => Promise<{
     success: boolean;
     data?: { prompt: string | null };
     error?: string;
   }>;
-  getDefaultAudioPrompt: () => Promise<{
+  getAudioPromptVersion: () => Promise<{
     success: boolean;
-    data?: { prompt: string };
+    data?: { version: string };
+    error?: string;
+  }>;
+  setAudioPromptVersion: (version: string) => Promise<{
+    success: boolean;
+    data?: { version: string };
+    error?: string;
+  }>;
+  getDefaultAudioPrompt: (version?: string) => Promise<{
+    success: boolean;
+    data?: { prompt: string; version?: string };
     error?: string;
   }>;
   setAudioPrompt: (prompt: string) => Promise<{
@@ -538,7 +553,11 @@ const electronAPI = {
   getDefaultSystemPrompt: () => ipcRenderer.invoke("get-default-system-prompt"),
   // Audio Prompt (for Meeting Assistant)
   getAudioPrompt: () => ipcRenderer.invoke("get-audio-prompt"),
-  getDefaultAudioPrompt: () => ipcRenderer.invoke("get-default-audio-prompt"),
+  getAudioPromptVersion: () => ipcRenderer.invoke("get-audio-prompt-version"),
+  setAudioPromptVersion: (version: string) => ipcRenderer.invoke("set-audio-prompt-version", version),
+  getAudioPromptNames: () => ipcRenderer.invoke("get-audio-prompt-names"),
+  setAudioPromptName: (version: string, name: string) => ipcRenderer.invoke("set-audio-prompt-name", version, name),
+  getDefaultAudioPrompt: (version?: string) => ipcRenderer.invoke("get-default-audio-prompt", version),
   setAudioPrompt: (prompt: string) => ipcRenderer.invoke("set-audio-prompt", prompt),
   // Audio Route Models
   getAudioOnlyModel: () => ipcRenderer.invoke("get-audio-only-model"),

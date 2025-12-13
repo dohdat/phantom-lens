@@ -70,6 +70,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
   const [transcript, setTranscript] = useState("");
   const [currentPartial, setCurrentPartial] = useState("");
   const [audioPrompt, setAudioPrompt] = useState(DEFAULT_AUDIO_PROMPT);
+  const [audioPromptVersion, setAudioPromptVersion] = useState("v1");
   // Track which mode is being used for display
   const [captureMode, setCaptureMode] = useState<"audio-only" | "audio-screenshot">("audio-only");
   const [screenshotCount, setScreenshotCount] = useState(0);
@@ -116,20 +117,44 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
     };
   }, [stopDurationTimer]);
 
+  const loadAudioPromptFromSettings = useCallback(async () => {
+    let versionId = "v1";
+    try {
+      const versionResponse = await (window as any).electronAPI?.getAudioPromptVersion?.();
+      if (versionResponse?.success && versionResponse.data?.version) {
+        versionId = versionResponse.data.version;
+        setAudioPromptVersion(versionResponse.data.version);
+      }
+    } catch (e) {
+      console.warn("Failed to load audio prompt version:", e);
+    }
+
+    try {
+      const response = await (window as any).electronAPI?.getAudioPrompt?.();
+      if (response?.success && response.data?.prompt) {
+        setAudioPrompt(response.data.prompt);
+        if (response.data?.version) {
+          versionId = response.data.version;
+          setAudioPromptVersion(response.data.version);
+        }
+      } else {
+        const defaultResponse = await (window as any).electronAPI?.getDefaultAudioPrompt?.(versionId);
+        if (defaultResponse?.success && defaultResponse.data?.prompt) {
+          setAudioPrompt(defaultResponse.data.prompt);
+          if (defaultResponse.data?.version) {
+            setAudioPromptVersion(defaultResponse.data.version);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load audio prompt from settings:", e);
+    }
+  }, []);
+
   // Load audio prompt from settings on mount
   useEffect(() => {
-    const loadAudioPrompt = async () => {
-      try {
-        const response = await (window as any).electronAPI?.getAudioPrompt?.();
-        if (response?.success && response.data?.prompt) {
-          setAudioPrompt(response.data.prompt);
-        }
-      } catch (e) {
-        console.warn("Failed to load audio prompt from settings:", e);
-      }
-    };
-    loadAudioPrompt();
-  }, []);
+    loadAudioPromptFromSettings();
+  }, [loadAudioPromptFromSettings]);
 
   // Listen for toggle events from keyboard shortcuts (Ctrl+Shift+A or Ctrl+Shift+S)
   useEffect(() => {
@@ -203,10 +228,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
         isCapturingRef.current = true;
         
         try {
-          const response = await (window as any).electronAPI?.getAudioPrompt?.();
-          if (response?.success && response.data?.prompt) {
-            setAudioPrompt(response.data.prompt);
-          }
+          await loadAudioPromptFromSettings();
         } catch (e) {
           console.warn("Failed to load audio prompt:", e);
         }
@@ -268,7 +290,7 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
       cleanupError?.();
       cleanupTranscript?.();
     };
-  }, [startDurationTimer, stopDurationTimer]);
+  }, [loadAudioPromptFromSettings, startDurationTimer, stopDurationTimer]);
 
   useEffect(() => {
     const cleanup = (window as any).electronAPI?.onScreenshotTaken?.(() => {

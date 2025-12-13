@@ -95,6 +95,26 @@ const MODEL_OPTIONS: Record<string, Array<{id: string; name: string; description
   ],
 };
 
+const AUDIO_PROMPT_VERSIONS = [
+  {
+    id: "v1",
+    name: "v1 - Summary + clarifying questions",
+    description: "Recap plus clarifying questions for architecture, scale, and risks.",
+  },
+  {
+    id: "v2",
+    name: "v2 - Actions + risks",
+    description: "Focus on decisions, action items with owners, and risks/dependencies.",
+  },
+  {
+    id: "v3",
+    name: "v3 - Executive brief",
+    description: "Executive-ready summary with decisions and follow-ups.",
+  },
+];
+
+const DEFAULT_AUDIO_PROMPT_VERSION = "v1";
+
 export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -116,6 +136,8 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   // Audio prompt state (for Meeting Assistant)
   const [audioPrompt, setAudioPrompt] = useState("");
+  const [audioPromptVersion, setAudioPromptVersion] = useState(DEFAULT_AUDIO_PROMPT_VERSION);
+  const [audioPromptNames, setAudioPromptNames] = useState<Record<string, string>>({});
   const [showAudioPromptEditor, setShowAudioPromptEditor] = useState(false);
   // Vision model state (for two-step processing)
   const [visionModel, setVisionModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct");
@@ -181,9 +203,16 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
   }, [isVisible, deactivateInteractiveMode]);
 
   // FIXED: Use glass folder approach - fixed height with internal scrolling
+  const getAudioPromptLabel = useCallback((id: string) => {
+    return (audioPromptNames[id]?.trim?.() || AUDIO_PROMPT_VERSIONS.find(v => v.id === id)?.name || id);
+  }, [audioPromptNames]);
+
   const TOOLTIP_HEIGHT = 520; // Increased height for system prompt editor
   const TOOLTIP_WIDTH = 340; // Increased width for better readability
   const BASE_WINDOW_HEIGHT = 260;
+  const selectedAudioPromptPreset = AUDIO_PROMPT_VERSIONS.find(
+    (version) => version.id === audioPromptVersion
+  ) || AUDIO_PROMPT_VERSIONS[0];
 
   // Load configuration function - defined before useEffect
   const loadCurrentConfig = useCallback(async () => {
@@ -226,20 +255,55 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
         console.warn("Failed to load system prompt:", e);
       }
 
+      let detectedAudioPromptVersion = DEFAULT_AUDIO_PROMPT_VERSION;
+
+      // Load audio prompt version (for Meeting Assistant)
+      try {
+        const audioPromptVersionResponse = await window.electronAPI.getAudioPromptVersion?.();
+        if (audioPromptVersionResponse?.success && audioPromptVersionResponse.data?.version) {
+          detectedAudioPromptVersion = audioPromptVersionResponse.data.version;
+          setAudioPromptVersion(audioPromptVersionResponse.data.version);
+        } else {
+          setAudioPromptVersion(DEFAULT_AUDIO_PROMPT_VERSION);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio prompt version:", e);
+        setAudioPromptVersion(DEFAULT_AUDIO_PROMPT_VERSION);
+      }
+
       // Load audio prompt (for Meeting Assistant)
       try {
         const audioPromptResponse = await window.electronAPI.getAudioPrompt?.();
         if (audioPromptResponse?.success && audioPromptResponse.data?.prompt) {
           setAudioPrompt(audioPromptResponse.data.prompt);
+          if (audioPromptResponse.data?.version) {
+            detectedAudioPromptVersion = audioPromptResponse.data.version;
+            setAudioPromptVersion(audioPromptResponse.data.version);
+          }
         } else {
           // No custom audio prompt set, load the default prompt for display
-          const defaultAudioPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.();
+          const defaultAudioPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.(detectedAudioPromptVersion);
           if (defaultAudioPromptResponse?.success && defaultAudioPromptResponse.data?.prompt) {
             setAudioPrompt(defaultAudioPromptResponse.data.prompt);
+            if (defaultAudioPromptResponse.data?.version) {
+              setAudioPromptVersion(defaultAudioPromptResponse.data.version);
+            }
+          } else {
+            setAudioPromptVersion(DEFAULT_AUDIO_PROMPT_VERSION);
           }
         }
       } catch (e) {
         console.warn("Failed to load audio prompt:", e);
+      }
+
+      // Load custom audio prompt names
+      try {
+        const namesResponse = await window.electronAPI.getAudioPromptNames?.();
+        if (namesResponse?.success && namesResponse.data?.names) {
+          setAudioPromptNames(namesResponse.data.names);
+        }
+      } catch (e) {
+        console.warn("Failed to load audio prompt names:", e);
       }
 
       // Load auto screenshot interval
@@ -529,6 +593,42 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
       setIsLoading(false);
     }
   }, [apiKey, selectedModel, selectedProvider, maxCompletionTokens, reasoningEffort, loadCurrentConfig]);
+
+  const handleAudioPromptVersionChange = useCallback(async (versionId: string) => {
+    if (!isInteractive) return;
+
+    setAudioPromptVersion(versionId);
+    try {
+      await window.electronAPI.setAudioPromptVersion?.(versionId);
+    } catch (e) {
+      console.error("Failed to save audio prompt version:", e);
+    }
+
+    try {
+      const defaultResponse = await window.electronAPI.getDefaultAudioPrompt?.(versionId);
+      if (defaultResponse?.success && defaultResponse.data?.prompt) {
+        setAudioPrompt(defaultResponse.data.prompt);
+        await window.electronAPI.setAudioPrompt?.(defaultResponse.data.prompt);
+      }
+      const namesResponse = await window.electronAPI.getAudioPromptNames?.();
+      if (namesResponse?.success && namesResponse.data?.names) {
+        setAudioPromptNames(namesResponse.data.names);
+      }
+    } catch (e) {
+      console.error("Failed to apply audio prompt version default:", e);
+    }
+  }, [isInteractive]);
+
+  const handleSaveAudioPromptName = useCallback(async (versionId: string, name: string) => {
+    try {
+      const response = await window.electronAPI.setAudioPromptName?.(versionId, name);
+      if (response?.success && response.data?.name) {
+        setAudioPromptNames(prev => ({ ...prev, [versionId]: response.data!.name }));
+      }
+    } catch (e) {
+      console.error("Failed to save audio prompt name:", e);
+    }
+  }, []);
 
   const handleSaveScreenshotInterval = useCallback(async () => {
     if (!isInteractive) return;
@@ -1345,6 +1445,48 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
               </div>
               {showAudioPromptEditor && (
                 <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Prompt Version</label>
+                    <select
+                      value={audioPromptVersion}
+                      onChange={(e) => handleAudioPromptVersionChange(e.target.value)}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      className={`w-full px-3 py-2 rounded-lg text-white text-xs transition-all duration-200 ${
+                        isTransparent ? '' : 'bg-white/10 border border-white/20'
+                      } ${isInteractive ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' : 'cursor-default'}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    >
+                      {AUDIO_PROMPT_VERSIONS.map((version) => (
+                        <option key={version.id} value={version.id} className="bg-black">
+                          {getAudioPromptLabel(version.id)}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={getAudioPromptLabel(audioPromptVersion)}
+                      onChange={(e) => {
+                        if (!isInteractive) return;
+                        const newName = e.target.value;
+                        setAudioPromptNames((prev) => ({ ...prev, [audioPromptVersion]: newName }));
+                      }}
+                      onBlur={(e) => {
+                        if (!isInteractive) return;
+                        handleSaveAudioPromptName(audioPromptVersion, e.target.value);
+                      }}
+                      disabled={!isInteractive}
+                      tabIndex={isInteractive ? 0 : -1}
+                      placeholder="Custom name"
+                      className={`w-full mt-2 px-3 py-2 rounded-lg text-white text-xs transition-all duration-200 ${
+                        isTransparent ? '' : 'bg-white/10 border border-white/20'
+                      } ${isInteractive ? 'focus:outline-none focus:ring-2 focus:ring-purple-500/20' : 'cursor-default'}`}
+                      style={isTransparent ? { background: 'transparent', border: 'none' } : {}}
+                    />
+                    <p className="text-[10px] text-white/50 leading-relaxed mt-1">
+                      {selectedAudioPromptPreset?.description}
+                    </p>
+                  </div>
                   <textarea
                     value={audioPrompt}
                     onChange={(e) => {
@@ -1367,7 +1509,9 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       onClick={async () => {
                         if (!isInteractive) return;
                         try {
+                          await window.electronAPI.setAudioPromptVersion?.(audioPromptVersion);
                           await window.electronAPI.setAudioPrompt?.(audioPrompt);
+                          await handleSaveAudioPromptName(audioPromptVersion, getAudioPromptLabel(audioPromptVersion));
                           console.log("Audio prompt saved");
                         } catch (e) {
                           console.error("Failed to save audio prompt:", e);
@@ -1384,9 +1528,15 @@ export default function Tooltip({ trigger, onVisibilityChange }: TooltipProps) {
                       onClick={async () => {
                         if (!isInteractive) return;
                         try {
-                          const defaultPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.();
+                          const defaultPromptResponse = await window.electronAPI.getDefaultAudioPrompt?.(audioPromptVersion);
                           if (defaultPromptResponse?.success && defaultPromptResponse.data?.prompt) {
+                            const targetVersion = defaultPromptResponse.data?.version || audioPromptVersion;
                             setAudioPrompt(defaultPromptResponse.data.prompt);
+                            setAudioPromptVersion(targetVersion);
+                            await window.electronAPI.setAudioPrompt?.(defaultPromptResponse.data.prompt);
+                            await window.electronAPI.setAudioPromptVersion?.(targetVersion);
+                            const presetName = getAudioPromptLabel(targetVersion);
+                            await handleSaveAudioPromptName(targetVersion, presetName);
                           }
                         } catch (e) {
                           console.error("Failed to load default audio prompt:", e);

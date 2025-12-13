@@ -119,8 +119,33 @@ interface Window {
       data?: { prompt: string | null };
       error?: string;
     }>;
+    getAudioPromptVersion: () => Promise<{
+      success: boolean;
+      data?: { version: string };
+      error?: string;
+    }>;
+    getAudioPromptNames: () => Promise<{
+      success: boolean;
+      data?: { names: Record<string, string> };
+      error?: string;
+    }>;
+    setAudioPromptName: (version: string, name: string) => Promise<{
+      success: boolean;
+      data?: { version: string; name: string };
+      error?: string;
+    }>;
+    setAudioPromptVersion: (version: string) => Promise<{
+      success: boolean;
+      data?: { version: string };
+      error?: string;
+    }>;
     setAudioPrompt: (prompt: string) => Promise<{
       success: boolean;
+      error?: string;
+    }>;
+    getDefaultAudioPrompt: (version?: string) => Promise<{
+      success: boolean;
+      data?: { prompt: string; version?: string };
       error?: string;
     }>;
     // Audio Route Models

@@ -7,6 +7,89 @@ import { secureConfig } from "./config";
 import { updateService } from "./UpdateService";
 import { getAppOpenCount, resetAppOpenCount } from "./UsageCounter";
 
+const AUDIO_PROMPT_PRESETS: Record<string, { id: string; name: string; prompt: string }> = {
+  "v1": {
+    id: "v1",
+    name: "Summary + clarifying questions",
+    prompt: `You are a senior software engineer at Splunk working on the ITSI Event Analytics team. Based on the provided conversation transcript and screenshot if available, identify the current ITSI related topics being discussed. Focus only on what is actually present in the transcript and provided screenshots, such as: 
+
+Notable events and grouping
+
+Correlation searches and episode creation
+
+Rules engine behavior
+
+KPI or service health workflows
+
+Gaps or issues in ITSI UI or Event Analytics workflows
+
+Any UX concerns mentioned
+
+Provide a concise list of detected topics and UX issues, without summarizing unrelated material.
+
+Then propose a few clarifying questions to confirm missing details or next steps.
+
+Transcript: "{{TRANSCRIPT}}"`
+  },
+  "v2": {
+    id: "v2",
+    name: "Actions + risks",
+    prompt: `You are a staff-plus engineer capturing outcomes from a technical working session.
+
+Summary: 3-5 bullet recap of the most important topics, decisions, and the rationale behind them.
+
+Action Items: Numbered list with owner and ETA if stated. Use "TBD" when either is missing.
+
+Risks & Dependencies: Bullet any risks, blockers, or dependencies plus suggested mitigations when mentioned.
+
+Keep it direct and technical - no filler.
+
+Conversation transcript:
+"{{TRANSCRIPT}}"
+
+Your response:`
+  },
+  "v3": {
+    id: "v3",
+    name: "Executive brief",
+    prompt: `You are preparing an executive briefing based on a technical meeting.
+
+Executive Summary: 2-3 sentences that state goals, current status, and any direction changes.
+
+Key Decisions: Bulleted list with what was decided and the reasoning.
+
+Open Questions / Follow Ups: Bullets with owners if mentioned; highlight what is needed to move forward.
+
+Use crisp business language and stay concise.
+
+Conversation transcript:
+"{{TRANSCRIPT}}"
+
+Your response:`
+  }
+};
+
+const DEFAULT_AUDIO_PROMPT_VERSION = "v1";
+const AUDIO_PROMPT_NAMES_KEY = "audio-prompt-names";
+
+function getAudioPromptPreset(versionId?: string) {
+  if (versionId && AUDIO_PROMPT_PRESETS[versionId]) {
+    return AUDIO_PROMPT_PRESETS[versionId];
+  }
+  return AUDIO_PROMPT_PRESETS[DEFAULT_AUDIO_PROMPT_VERSION];
+}
+
+function parseAudioPromptNames(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, string>;
+    }
+  } catch {}
+  return {};
+}
+
 // ============================================================================
 // Enhanced Error Handling Wrapper
 // ============================================================================
@@ -1043,39 +1126,101 @@ export function initializeIpcHandlers(deps: initializeIpcHandlerDeps): void {
   // ============================================================================
   ipcMain.handle("get-audio-prompt", createSafeIpcHandler(async () => {
     try {
-      const prompt = await getStoreValue("audio-prompt");
-      return { success: true, data: { prompt: prompt || null } };
+      const storedPrompt = await getStoreValue("audio-prompt");
+      const storedVersion = await getStoreValue("audio-prompt-version");
+      const preset = getAudioPromptPreset(typeof storedVersion === "string" ? storedVersion : undefined);
+      const prompt = (typeof storedPrompt === "string" && storedPrompt.trim().length > 0)
+        ? storedPrompt
+        : preset.prompt;
+
+      return { success: true, data: { prompt, version: preset.id } };
     } catch (error: any) {
       console.error("Error getting audio prompt:", error);
       return { success: false, error: "Failed to get audio prompt" };
     }
   }, "get-audio-prompt"));
 
-  ipcMain.handle("get-default-audio-prompt", createSafeIpcHandler(async () => {
+  ipcMain.handle("get-default-audio-prompt", createSafeIpcHandler(async (_event: any, versionId?: string) => {
     try {
-      const defaultPrompt = `You are a senior software engineer participating in a technical meeting. Based on the conversation transcript below:
-
-Summary: Provide a concise summary in clear key points that capture the main topics discussed.
-
-Clarifying Questions: Ask a set of simple English questions that show strong technical understanding. Focus on:
-- Architecture decisions and tradeoffs
-- Scalability concerns
-- Edge cases and error handling
-- Security considerations
-- Requirements, dependencies, and constraints
-
-Keep your response concise and professional.
-
-Conversation transcript:
-"{{TRANSCRIPT}}"
-
-Your response:`;
-      return { success: true, data: { prompt: defaultPrompt } };
+      const preset = getAudioPromptPreset(versionId);
+      return { success: true, data: { prompt: preset.prompt, version: preset.id } };
     } catch (error: any) {
       console.error("Error getting default audio prompt:", error);
       return { success: false, error: "Failed to get default audio prompt" };
     }
   }, "get-default-audio-prompt"));
+
+  ipcMain.handle("get-audio-prompt-version", createSafeIpcHandler(async () => {
+    try {
+      const storedVersion = await getStoreValue("audio-prompt-version");
+      const preset = getAudioPromptPreset(typeof storedVersion === "string" ? storedVersion : undefined);
+      return { success: true, data: { version: preset.id } };
+    } catch (error: any) {
+      console.error("Error getting audio prompt version:", error);
+      return { success: false, error: "Failed to get audio prompt version" };
+    }
+  }, "get-audio-prompt-version"));
+
+  ipcMain.handle("set-audio-prompt-version", createSafeIpcHandler(async (
+    _event: any,
+    versionId: string
+  ) => {
+    try {
+      if (!versionId || !AUDIO_PROMPT_PRESETS[versionId]) {
+        return { success: false, error: "Invalid audio prompt version" };
+      }
+
+      const success = await setStoreValue("audio-prompt-version", versionId);
+      if (!success) {
+        return { success: false, error: "Failed to save audio prompt version" };
+      }
+
+      return { success: true, data: { version: versionId } };
+    } catch (error: any) {
+      console.error("Error setting audio prompt version:", error);
+      return { success: false, error: "Failed to save audio prompt version" };
+    }
+  }, "set-audio-prompt-version"));
+
+  ipcMain.handle("get-audio-prompt-names", createSafeIpcHandler(async () => {
+    try {
+      const rawNames = await getStoreValue(AUDIO_PROMPT_NAMES_KEY);
+      const names = parseAudioPromptNames(rawNames);
+      return { success: true, data: { names } };
+    } catch (error: any) {
+      console.error("Error getting audio prompt names:", error);
+      return { success: false, error: "Failed to get audio prompt names" };
+    }
+  }, "get-audio-prompt-names"));
+
+  ipcMain.handle("set-audio-prompt-name", createSafeIpcHandler(async (
+    _event: any,
+    versionId: string,
+    name: string
+  ) => {
+    try {
+      if (!versionId || !AUDIO_PROMPT_PRESETS[versionId]) {
+        return { success: false, error: "Invalid audio prompt version" };
+      }
+
+      const trimmedName = (name || "").trim();
+      const fallbackName = AUDIO_PROMPT_PRESETS[versionId].name;
+      const rawNames = await getStoreValue(AUDIO_PROMPT_NAMES_KEY);
+      const names = parseAudioPromptNames(rawNames);
+
+      names[versionId] = trimmedName || fallbackName;
+
+      const success = await setStoreValue(AUDIO_PROMPT_NAMES_KEY, JSON.stringify(names));
+      if (!success) {
+        return { success: false, error: "Failed to save audio prompt name" };
+      }
+
+      return { success: true, data: { version: versionId, name: names[versionId] } };
+    } catch (error: any) {
+      console.error("Error setting audio prompt name:", error);
+      return { success: false, error: "Failed to save audio prompt name" };
+    }
+  }, "set-audio-prompt-name"));
 
   ipcMain.handle("set-audio-prompt", createSafeIpcHandler(async (
     _event: any,
@@ -1085,6 +1230,10 @@ Your response:`;
       const success = await setStoreValue("audio-prompt", prompt);
       if (!success) {
         return { success: false, error: "Failed to save audio prompt" };
+      }
+      const storedVersion = await getStoreValue("audio-prompt-version");
+      if (!storedVersion || !AUDIO_PROMPT_PRESETS[storedVersion]) {
+        await setStoreValue("audio-prompt-version", DEFAULT_AUDIO_PROMPT_VERSION);
       }
       console.log("Audio prompt saved successfully");
       return { success: true };
