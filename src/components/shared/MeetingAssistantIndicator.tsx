@@ -337,10 +337,12 @@ export function MeetingAssistantIndicator({ className = "" }: MeetingAssistantIn
 
   return (
     <div 
-      className={`fixed top-16 flex flex-col gap-2 z-50 ${className}`}
+      className={`fixed flex flex-col gap-2 z-50 ${className}`}
       style={{ 
-        right: 'calc(0.5rem + 470px)',
-        width: '320px'
+        left: '16px',
+        bottom: '16px',
+        width: '320px',
+        maxWidth: 'calc(100vw - 32px)'
       }}
     >
       {/* Main card container - matches Response page style */}
